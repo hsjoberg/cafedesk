@@ -40,6 +40,9 @@ type Store struct {
 // New returns a store on the pool.
 func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
+// Pool is the store's database, for work outside it such as backups.
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
+
 func newID() uuid.UUID {
 	id, err := uuid.NewV7()
 	if err != nil {

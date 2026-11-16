@@ -220,6 +220,9 @@ that exists:
 - Outbox sync with retry; online/offline indicator on the POS.
 - Admin: login, menu and price management, order list, daily sales.
 - Backups (Railway's, plus nightly `pg_dump` to object storage), uptime alert, alert when a terminal has not synced for 24 hours.
+  - Done: nightly backups by the server itself, to a bucket and/or a folder,
+    with `backup` and `restore` commands (no `pg_dump` needed; see
+    docs/phase2.md). The alerts moved to Phase 5.
 
 ### Phase 3: Costs and margins (about 2 weeks)
 1. Simple: one manual cost per item, giving margin per item.
@@ -235,6 +238,14 @@ Sales by day, hour, item and category; margin per item and per day; best and wor
 - Stock counts and waste tracking.
 - A second terminal, or a kitchen display as another terminal role.
 - Streaming via SSE for instant menu updates and live dashboards.
+- **Alerts, by Telegram** (deferred until there is time to set up a bot):
+  - A Telegram bot, its token and the chat to post to as server settings.
+  - From the server: a till silent for 24 hours, a nightly backup that failed
+    (the `backups` table already records each one), a cash count short by more
+    than a set amount.
+  - The server being down can't be reported by the server: an outside check
+    such as UptimeRobot or Healthchecks.io watching `/healthz`, which can post
+    to Telegram itself.
 
 ## 8. Risks
 

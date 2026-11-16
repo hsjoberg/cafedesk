@@ -6,10 +6,15 @@
 //	server setup -org ...  create the organization, its first shop and owner
 //	server demo            fill a new, empty database with a demo shop and a
 //	                       month of made-up sales, to show or try the admin
+//	server backup          write a backup to a file, or with -now to where
+//	                       the nightly backups go
+//	server restore FILE    load a backup into a new, empty database
 //
 // Environment: DATABASE_URL (required), PORT (8080), CAFEDESK_TRUST_PROXY=1
 // behind a proxy such as Railway's, CAFEDESK_INSECURE_COOKIES=1 only for
-// development over plain HTTP from another machine.
+// development over plain HTTP from another machine. Nightly backups go to
+// CAFEDESK_BACKUP_DIR and to a bucket, CAFEDESK_BACKUP_S3_* (see
+// backupDestinations).
 package main
 
 import (
@@ -27,12 +32,14 @@ import (
 
 	"cafedesk/apps/server/internal/api"
 	"cafedesk/apps/server/internal/auth"
+	"cafedesk/apps/server/internal/backup"
 	"cafedesk/apps/server/internal/db"
 	"cafedesk/apps/server/internal/server"
 	"cafedesk/apps/server/internal/store"
 	"cafedesk/apps/server/web"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/term"
 )
 
@@ -55,8 +62,12 @@ func main() {
 		err = setup(args)
 	case "demo":
 		err = demo(args)
+	case "backup":
+		err = backupCmd(args)
+	case "restore":
+		err = restoreCmd(args)
 	default:
-		err = fmt.Errorf("unknown command %q: use serve, migrate, setup or demo", cmd)
+		err = fmt.Errorf("unknown command %q: use serve, migrate, setup, demo, backup or restore", cmd)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -65,19 +76,130 @@ func main() {
 }
 
 func openStore(ctx context.Context, log *slog.Logger) (*store.Store, func(), error) {
-	pool, err := db.Open(ctx, os.Getenv("DATABASE_URL"))
+	pool, err := openPool(ctx, log)
 	if err != nil {
 		return nil, nil, err
+	}
+	return store.New(pool), pool.Close, nil
+}
+
+// openPool opens the database and migrates it.
+func openPool(ctx context.Context, log *slog.Logger) (*pgxpool.Pool, error) {
+	pool, err := db.Open(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return nil, err
 	}
 	n, err := db.Migrate(ctx, pool)
 	if err != nil {
 		pool.Close()
-		return nil, nil, err
+		return nil, err
 	}
 	if n > 0 && log != nil {
 		log.Info("migrated", "applied", n)
 	}
-	return store.New(pool), pool.Close, nil
+	return pool, nil
+}
+
+// backupDestinations are where the nightly backups go, from the
+// environment: a folder, CAFEDESK_BACKUP_DIR, and an S3-compatible bucket,
+// CAFEDESK_BACKUP_S3_ENDPOINT, _BUCKET, _ACCESS_KEY_ID, _SECRET_ACCESS_KEY,
+// _REGION (auto), _PREFIX (a folder in the bucket) and _PATH_STYLE=1 for
+// buckets that need it.
+func backupDestinations() ([]backup.Destination, error) {
+	var dests []backup.Destination
+	if dir := os.Getenv("CAFEDESK_BACKUP_DIR"); dir != "" {
+		dests = append(dests, backup.Dir(dir))
+	}
+	env := func(k string) string { return os.Getenv("CAFEDESK_BACKUP_S3_" + k) }
+	if env("ENDPOINT") != "" || env("BUCKET") != "" {
+		region := env("REGION")
+		if region == "" {
+			region = "auto"
+		}
+		b, err := backup.NewBucket(backup.S3Config{Endpoint: env("ENDPOINT"), Bucket: env("BUCKET"),
+			AccessKey: env("ACCESS_KEY_ID"), SecretKey: env("SECRET_ACCESS_KEY"), Region: region,
+			PathStyle: env("PATH_STYLE") == "1", Prefix: env("PREFIX")})
+		if err != nil {
+			return nil, fmt.Errorf("backup bucket: %w", err)
+		}
+		dests = append(dests, b)
+	}
+	return dests, nil
+}
+
+// backupCmd writes a backup to a file, or with -now takes the nightly
+// backup at once, to check its settings.
+func backupCmd(args []string) error {
+	fs := flag.NewFlagSet("backup", flag.ExitOnError)
+	out := fs.String("o", "", "the file to write (default cafedesk-<date>.sql.gz here)")
+	now := fs.Bool("now", false, "take the nightly backup now, to CAFEDESK_BACKUP_DIR and the bucket")
+	fs.Parse(args)
+	ctx := context.Background()
+	pool, err := openPool(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if *now {
+		dests, err := backupDestinations()
+		if err != nil {
+			return err
+		}
+		if len(dests) == 0 {
+			return errors.New("set CAFEDESK_BACKUP_DIR or CAFEDESK_BACKUP_S3_* first, or write a file with -o")
+		}
+		name, size, err := backup.Run(ctx, pool, dests, time.Now())
+		if err != nil {
+			return err
+		}
+		for _, d := range dests {
+			fmt.Printf("Backed up to %s: %s, %d KB.\n", d, name, (size+1023)/1024)
+		}
+		return nil
+	}
+	if *out == "" {
+		*out = "cafedesk-" + time.Now().Format("2006-01-02") + ".sql.gz"
+	}
+	f, err := os.OpenFile(*out, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := backup.Write(ctx, pool, f, time.Now()); err != nil {
+		f.Close()
+		os.Remove(*out)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	fmt.Printf("Backed up to %s.\n", *out)
+	return nil
+}
+
+// restoreCmd loads a backup into the new, empty database at DATABASE_URL.
+func restoreCmd(args []string) error {
+	if len(args) != 1 {
+		return errors.New("give the backup file: server restore cafedesk-2026-11-16.sql.gz")
+	}
+	f, err := os.Open(args[0])
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	ctx := context.Background()
+	// Not openPool: the backup's own schema version is made first.
+	pool, err := db.Open(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	info, err := backup.Restore(ctx, pool, f)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Restored the backup taken %s. Start the server on this database.\n",
+		info.Taken.Local().Format("2 Jan 2006 15:04"))
+	return nil
 }
 
 func migrate(log *slog.Logger) error {
@@ -116,6 +238,15 @@ func serve(log *slog.Logger) error {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+	}
+	dests, err := backupDestinations()
+	if err != nil {
+		return err
+	}
+	if len(dests) == 0 {
+		log.Warn("backups are off: set CAFEDESK_BACKUP_DIR or CAFEDESK_BACKUP_S3_* (docs/phase2.md)")
+	} else {
+		go backup.Nightly(ctx, st.Pool(), dests, log)
 	}
 	go func() {
 		for range time.Tick(time.Hour) {

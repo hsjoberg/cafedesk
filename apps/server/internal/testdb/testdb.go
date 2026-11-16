@@ -22,6 +22,17 @@ import (
 // TEST_DATABASE_URL isn't set.
 func New(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	pool := Empty(t)
+	if _, err := db.Migrate(context.Background(), pool); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return pool
+}
+
+// Empty returns a pool on a new database with nothing in it, not even the
+// schema.
+func Empty(t *testing.T) *pgxpool.Pool {
+	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
 		t.Skip("set TEST_DATABASE_URL to run the tests that need PostgreSQL")
@@ -51,8 +62,5 @@ func New(t *testing.T) *pgxpool.Pool {
 		admin.Exec(context.Background(), "DROP DATABASE "+name+" WITH (FORCE)")
 		admin.Close(context.Background())
 	})
-	if _, err := db.Migrate(ctx, pool); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
 	return pool
 }

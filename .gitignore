@@ -18,6 +18,9 @@ apps/pos/testdata/snapshots/
 .DS_Store
 Thumbs.db
 
+# Database backups: they hold password and PIN hashes
+*.sql.gz
+
 # Local environment
 .env
 .env.*

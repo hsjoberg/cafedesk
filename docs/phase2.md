@@ -204,6 +204,9 @@ Server environment variables:
 | `CAFEDESK_TRUST_PROXY=1` | Take the client's address from `X-Forwarded-For`. Set it on Railway; leave it off anywhere else, as anyone could fake the header. |
 | `CAFEDESK_INSECURE_COOKIES=1` | Never mark the session cookie HTTPS-only. Not needed for a server in the shop: over plain HTTP to a local address (`localhost`, `192.168.…`, `10.…`) the server already leaves it off, and to a public address, as on Railway, it always sets it. |
 | `CAFEDESK_OWNER_PASSWORD` | Lets `setup` run without a terminal. |
+| `CAFEDESK_BACKUP_DIR` | A folder for the nightly backups: a second disk or USB drive for a server in the shop. |
+| `CAFEDESK_BACKUP_S3_ENDPOINT`, `_BUCKET`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY` | An S3-compatible bucket for the nightly backups: a Railway bucket, Cloudflare R2, Backblaze B2 or AWS S3. |
+| `CAFEDESK_BACKUP_S3_REGION`, `_PREFIX`, `_PATH_STYLE=1` | The bucket's region (default `auto`), a folder in it, and path-style addressing for buckets that need it. |
 
 ## Tests
 
@@ -234,6 +237,69 @@ cd apps/server && go generate ./...   # Go types and handler interface
 cd apps/admin && bun run gen:api      # TypeScript types
 ```
 
+## Backups
+
+The server backs its database up every night at 3:00, shop time, to a folder
+(`CAFEDESK_BACKUP_DIR`), a bucket (`CAFEDESK_BACKUP_S3_*`), or both. Without
+either it backs nothing up and says so in its log when it starts. A server
+that was off at 3:00 takes the night's backup when it starts again; a backup
+that fails is tried again an hour later.
+
+- A backup is one file, `cafedesk-<date>.sql.gz`: every table's rows, as one
+  consistent snapshot, without sign-in sessions and pairing codes. A few
+  hundred KB for a month of sales.
+- Each place keeps the latest 30, and the one from the first of each month for
+  good.
+- It holds password and PIN hashes, so keep it as private as the database.
+
+By hand:
+
+```sh
+go run . backup                        # writes cafedesk-<date>.sql.gz here
+go run . backup -o somewhere.sql.gz
+go run . backup -now                   # the nightly backup, now: checks the settings
+```
+
+With `DATABASE_URL` set to Railway's public URL, `backup` makes a copy of the
+real database on your PC.
+
+**Restoring** goes into a new, empty database, never over a working one. It
+makes the schema the backup was taken with, loads every table in one go, and
+migrates to the server's current schema:
+
+```powershell
+docker compose exec postgres createdb -U cafedesk cafedesk_restored
+$env:DATABASE_URL = 'postgres://cafedesk:cafedesk@localhost:5432/cafedesk_restored?sslmode=disable'
+go run . restore cafedesk-2026-11-16.sql.gz
+```
+
+Then point the server at that database. Tills stay connected: their keys are
+in the backup. Sales a till made after the backup are still in its outbox
+only if it hadn't sent them yet; the rest are lost with the old database, so
+restore from the latest backup.
+
+Without the server, psql can load one too: make the schema with
+`server migrate`, then `gzip -dc backup.sql.gz | psql -1 -v ON_ERROR_STOP=1 -f -`.
+
+**On Railway:** add a **Bucket** to the project. Its Credentials tab shows the
+endpoint, bucket name and keys. On the server service, set (with the
+bucket's service name in place of `Bucket`):
+
+```
+CAFEDESK_BACKUP_S3_ENDPOINT=${{Bucket.ENDPOINT}}
+CAFEDESK_BACKUP_S3_BUCKET=${{Bucket.BUCKET}}
+CAFEDESK_BACKUP_S3_ACCESS_KEY_ID=${{Bucket.ACCESS_KEY_ID}}
+CAFEDESK_BACKUP_S3_SECRET_ACCESS_KEY=${{Bucket.SECRET_ACCESS_KEY}}
+CAFEDESK_BACKUP_S3_REGION=${{Bucket.REGION}}
+```
+
+If the Credentials tab says the bucket uses path-style URLs (older buckets),
+add `CAFEDESK_BACKUP_S3_PATH_STYLE=1`. Railway buckets have no expiry rules,
+which is why the server prunes old backups itself, and no backups of their
+own: now and then, download one to your PC (`backup` with the public URL, as
+above). Railway's own Postgres backups are a second layer where the plan has
+them.
+
 ## Deploying to Railway (when you're ready)
 
 1. In Railway, add a **PostgreSQL** service and a service from this repository.
@@ -247,3 +313,6 @@ cd apps/admin && bun run gen:api      # TypeScript types
 4. Run `setup` once against the Railway database. The simplest way is to turn
    on Postgres's public networking for a minute, run `go run . setup ...` from
    your machine with that public URL, then turn it off again.
+5. Add a bucket for the nightly backups (see Backups, above), and check it
+   with a deploy: the log says `backup` with the file's name once the first
+   one is taken.

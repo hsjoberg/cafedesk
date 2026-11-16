@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +45,25 @@ const migrationLock = 7_204_118_301
 // Migrate applies the migrations not yet applied, each in a transaction,
 // in the order of their numbers. It returns how many it applied.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	return MigrateTo(ctx, pool, math.MaxInt)
+}
+
+// Latest is the number of the last migration, the schema version this
+// server expects.
+func Latest() int {
+	files, _ := fs.Glob(migrations, "migrations/*.sql")
+	latest := 0
+	for _, f := range files {
+		if v, err := strconv.Atoi(strings.SplitN(strings.TrimPrefix(f, "migrations/"), "_", 2)[0]); err == nil && v > latest {
+			latest = v
+		}
+	}
+	return latest
+}
+
+// MigrateTo is Migrate, stopping after the migration numbered max: a
+// restore loads a backup into the schema it was taken from.
+func MigrateTo(ctx context.Context, pool *pgxpool.Pool, max int) (int, error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return 0, err
@@ -86,7 +106,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) (int, error) {
 		if err != nil {
 			return n, fmt.Errorf("migration %s: the name must start with its number", name)
 		}
-		if applied[version] {
+		if applied[version] || version > max {
 			continue
 		}
 		sql, err := migrations.ReadFile(f)
