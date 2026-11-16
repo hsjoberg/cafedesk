@@ -388,14 +388,20 @@ export function RecipesPage() {
                 <div class="recipe-line">
                   <select class="input" value={l().ref} onChange={(e) => setLines("list", i, "ref", e.currentTarget.value)}
                     aria-label="Ingredient or batch">
-                    <option value="">Choose…</option>
+                    {/* Each option says whether it is chosen: the batches appear a
+                        moment after the select's value is set, which then falls back. */}
+                    <option value="" selected={!l().ref}>Choose…</option>
                     <Show when={editing()?.kind !== "batch" && batches().length}>
                       <optgroup label="Batches">
-                        <For each={batches()}>{(b) => <option value={`b:${b.id}`}>{b.name}</option>}</For>
+                        <For each={batches()}>
+                          {(b) => <option value={`b:${b.id}`} selected={l().ref === `b:${b.id}`}>{b.name}</option>}
+                        </For>
                       </optgroup>
                     </Show>
                     <optgroup label="Ingredients">
-                      <For each={ingredients()}>{(x) => <option value={`i:${x.id}`}>{x.name}</option>}</For>
+                      <For each={ingredients()}>
+                        {(x) => <option value={`i:${x.id}`} selected={l().ref === `i:${x.id}`}>{x.name}</option>}
+                      </For>
                     </optgroup>
                   </select>
                   <div class="recipe-amount">
