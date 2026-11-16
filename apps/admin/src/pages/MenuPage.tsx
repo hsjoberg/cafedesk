@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store";
 import { api, call, type Category, type Item } from "../api/client";
 import { Tile } from "../components/Tile";
 import { formatFils, parseAmount } from "../money";
+import { itemRecipeLines, loadRecipes, recipeText } from "../recipeText";
 import { catalog, catalogError, reloadCatalog } from "../state";
 import { DeleteButton, EditorHead, Field, fieldError, FormError, toSaveError, type SaveError } from "../ui";
 
@@ -37,7 +38,10 @@ type ItemDraft = {
 type CategoryDraft = { name: string; nameAr: string; color: string; kitchen: boolean };
 
 export function MenuPage() {
-  onMount(reloadCatalog);
+  onMount(() => {
+    void reloadCatalog();
+    void loadRecipes();
+  });
   const categories = () => catalog()?.categories ?? [];
   const groups = () => catalog()?.modifierGroups ?? [];
   const [categoryId, setCategoryId] = createSignal<string>();
@@ -279,6 +283,11 @@ export function MenuPage() {
                 <p class="from-recipe">
                   {editedItem()!.costFils != null ? formatFils(editedItem()!.costFils!) : "No cost yet: an ingredient has no price"}
                 </p>
+                <Show when={recipeText(itemRecipeLines(editedItem()!.id)).length}>
+                  <ul class="recipe-origin">
+                    <For each={recipeText(itemRecipeLines(editedItem()!.id))}>{(t) => <li>{t}</li>}</For>
+                  </ul>
+                </Show>
                 <span class="meta">
                   It follows the recipe and today's prices. Change it on <A href="/recipes">Recipes</A>.
                 </span>

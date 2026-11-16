@@ -1,7 +1,9 @@
+import { A } from "@solidjs/router";
 import { createSignal, For, Index, onMount, Show } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { api, call, type ModifierGroup } from "../api/client";
 import { formatFils, parseAmount } from "../money";
+import { loadRecipes, optionRecipeLines, recipeText } from "../recipeText";
 import { catalog, catalogError, reloadCatalog } from "../state";
 import { DeleteButton, EditorHead, Field, fieldError, FormError, toSaveError, type SaveError } from "../ui";
 
@@ -21,7 +23,10 @@ const blankMod = (): ModDraft => ({ name: "", nameAr: "", delta: "0.00", cost: "
 
 /** Option groups: sugar levels, spice, extras. Items choose which they have. */
 export function OptionsPage() {
-  onMount(reloadCatalog);
+  onMount(() => {
+    void reloadCatalog();
+    void loadRecipes();
+  });
   const groups = () => catalog()?.modifierGroups ?? [];
   const [editing, setEditing] = createSignal<string | null | undefined>(undefined); // undefined: none; null: new
   const [g, setG] = createStore<GroupDraft>({ name: "", nameAr: "", multiple: false, modifiers: [] });
@@ -192,6 +197,10 @@ export function OptionsPage() {
                       <div class="field">
                         <span>Cost, from its recipe</span>
                         <p class="from-recipe">{m().cost || "No cost yet"}</p>
+                        <Show when={m().id && recipeText(optionRecipeLines(m().id!)).length}>
+                          <span class="meta">{recipeText(optionRecipeLines(m().id!)).join("; ")}. Change it on{" "}
+                            <A href="/recipes">Recipes</A>.</span>
+                        </Show>
                       </div>
                     </Show>
                   </div>

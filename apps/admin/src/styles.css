@@ -1188,6 +1188,27 @@ fieldset.bare {
   text-align: left;
   cursor: pointer;
 }
+.batch .used-in {
+  color: var(--ink);
+}
+.recipe-table .from-batches {
+  display: block;
+  font-weight: 400;
+}
+.used-by {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.batch-note {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+}
+.batch-note .link-row {
+  text-decoration: underline;
+  font-size: var(--fs-meta);
+}
 /* The editor is the recipe card: a line, an amount and its unit, its cost. */
 .recipe-line {
   display: grid;
@@ -1224,6 +1245,19 @@ fieldset.bare {
 }
 .recipe-total p {
   margin: 0 0 4px;
+}
+/* Links in hints and notes keep the text's color. */
+.field .meta a,
+.mod .meta a {
+  color: inherit;
+  font-weight: 500;
+}
+.recipe-origin {
+  margin: 0 0 4px;
+  padding-left: 18px;
+}
+.recipe-origin li {
+  line-height: 1.5;
 }
 .from-recipe {
   margin: 0;

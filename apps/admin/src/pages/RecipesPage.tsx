@@ -184,6 +184,28 @@ export function RecipesPage() {
   );
   const margin = (price: number, cost: number | null | undefined) =>
     cost != null && price > 0 ? `${Math.round(((price - cost) / price) * 100)}%` : "";
+  /** The items and options whose recipes use a batch, by name. */
+  const usersOf = (batchId: string) => {
+    const out: { kind: "item" | "option"; id: string; name: string }[] = [];
+    for (const r of recipes()?.items ?? []) {
+      if (r.lines.some((l) => l.batchId === batchId)) {
+        const it = items().find((i) => i.id === r.itemId);
+        if (it) out.push({ kind: "item", id: it.id, name: it.name });
+      }
+    }
+    for (const r of recipes()?.modifiers ?? []) {
+      if (r.lines.some((l) => l.batchId === batchId)) {
+        for (const g of groups()) {
+          const m = g.modifiers.find((x) => x.id === r.modifierId);
+          if (m) out.push({ kind: "option", id: m.id!, name: `${m.name} (${g.name})` });
+        }
+      }
+    }
+    return out;
+  };
+  /** The batches an item's recipe uses, by name. */
+  const batchesOf = (itemId: string) =>
+    (itemRecipe(itemId)?.lines ?? []).filter((l) => l.batchId).map((l) => batch(l.batchId!)?.name).filter(Boolean);
   const isEditing = (kind: string, id: string) => {
     const e = editing();
     return e?.kind === kind && e.id === id;
@@ -222,8 +244,9 @@ export function RecipesPage() {
                     <span class="price">
                       {b.portionCostFils != null ? `${formatFils(Math.round(b.portionCostFils))} a portion` : "No price yet"}
                     </span>
-                    <span class="meta">
-                      Makes {grouped.format(b.yieldPortions)} portions. Used in {b.usedBy === 1 ? "1 recipe" : `${b.usedBy} recipes`}.
+                    <span class="meta">Makes {grouped.format(b.yieldPortions)} portions.</span>
+                    <span class="meta used-in">
+                      {usersOf(b.id).length ? `Used in ${usersOf(b.id).map((u) => u.name).join(", ")}.` : "No meal uses it yet."}
                     </span>
                   </button>
                 )}
@@ -255,6 +278,9 @@ export function RecipesPage() {
                             e.stopPropagation();
                             open({ kind: "item", id: it.id });
                           }}>{it.name}</button>
+                          <Show when={batchesOf(it.id).length}>
+                            <span class="meta from-batches">From {batchesOf(it.id).join(" and ")}</span>
+                          </Show>
                         </th>
                         <td class="n">{formatFils(it.priceFils)}</td>
                         <td class="n">{costCell(it.costFils, it.costFromRecipe)}</td>
@@ -335,6 +361,24 @@ export function RecipesPage() {
             <Field label="Portions one batch makes" value={bd.portions} inputMode="decimal" placeholder="40"
               onInput={(v) => setBd("portions", v)} error={fieldError(error(), "yieldPortions")}
               hint="As the chef serves it: plates of curry, or of rice." />
+            <Show when={editing()?.id}>
+              <div class="field">
+                <span>Meals that use it</span>
+                <Show when={usersOf(editing()!.id!).length} fallback={
+                  <span class="meta">None yet. Add it to a meal's recipe as a line: "Chicken curry base, 1 portion".</span>
+                }>
+                  <div class="used-by">
+                    <For each={usersOf(editing()!.id!)}>
+                      {(u) => (
+                        <button type="button" class="btn btn-option btn-small" onClick={() => open({ kind: u.kind, id: u.id })}>
+                          {u.name}
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+            </Show>
           </Show>
 
           <div class="field">
@@ -369,6 +413,17 @@ export function RecipesPage() {
                       Remove
                     </button>
                   </div>
+                  <Show when={l().ref.startsWith("b:") && batch(l().ref.slice(2))}>
+                    {(b) => (
+                      <p class="batch-note">
+                        From the batch: {formatFils(Math.round(b().portionCostFils ?? 0))} a portion, {grouped.format(b().yieldPortions)} to a
+                        pot.{" "}
+                        <button type="button" class="link-row" onClick={() => open({ kind: "batch", id: b().id })}>
+                          Open the batch
+                        </button>
+                      </p>
+                    )}
+                  </Show>
                   <Show when={fieldError(error(), `lines.${i}.amount`) || fieldError(error(), `lines.${i}`)}>
                     <span class="error">{fieldError(error(), `lines.${i}.amount`) || fieldError(error(), `lines.${i}`)}</span>
                   </Show>
