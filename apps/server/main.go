@@ -363,7 +363,7 @@ then set DATABASE_URL to .../cafedesk_demo and run demo again`)
 		return err
 	}
 	const email = "demo@cafedesk.test"
-	o, sh, _, err := st.Setup(ctx, "Demo café", "Demo shop", "Demo owner", email, hash)
+	o, sh, owner, err := st.Setup(ctx, "Demo café", "Demo shop", "Demo owner", email, hash)
 	if err != nil {
 		return err
 	}
@@ -395,7 +395,10 @@ then set DATABASE_URL to .../cafedesk_demo and run demo again`)
 	if err := st.SeedDemoSales(ctx, o.ID, sh.ID, manager, cashiers, *days, time.Now(), 1); err != nil {
 		return fmt.Errorf("demo sales: %w", err)
 	}
-	fmt.Printf(`Set up %s with %d days of made-up sales.
+	if err := st.SeedDemoPurchases(ctx, o.ID, sh.ID, owner.ID, *days, time.Now(), 1); err != nil {
+		return fmt.Errorf("demo purchases: %w", err)
+	}
+	fmt.Printf(`Set up %s with %d days of made-up sales and purchases.
 Sign in to the admin as %s with the password %s
 Starting PINs for a till: Ravi (manager) 5678, Anil 2468, Priya 1357.
 `, o.Name, *days, email, password)

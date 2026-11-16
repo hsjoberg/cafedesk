@@ -15,6 +15,30 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for Area.
+const (
+	Counter   Area = "counter"
+	Kitchen   Area = "kitchen"
+	Other     Area = "other"
+	Packaging Area = "packaging"
+)
+
+// Valid indicates whether the value is a known member of the Area enum.
+func (e Area) Valid() bool {
+	switch e {
+	case Counter:
+		return true
+	case Kitchen:
+		return true
+	case Other:
+		return true
+	case Packaging:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EventType.
 const (
 	BusinessDay EventType = "business_day"
@@ -130,6 +154,23 @@ func (e UserRole) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+// packaging (cups, boxes, bags), or other.
+type Area string
+
+// AreaSpend defines model for AreaSpend.
+type AreaSpend struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area       Area  `json:"area"`
+	BoughtFils int64 `json:"boughtFils"`
+
+	// SalesFils The area's own sales less refunds: the counter's are items not on
+	// the kitchen ticket, the kitchen's are items on it. Missing for
+	// packaging and other, which serve all sales.
+	SalesFils *int64 `json:"salesFils,omitempty"`
 }
 
 // BusinessDayEvent A day as it stands, opened or closed.
@@ -503,6 +544,109 @@ type Ping struct {
 // PingStatus defines model for Ping.Status.
 type PingStatus string
 
+// Product defines model for Product.
+type Product struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area Area               `json:"area"`
+	Id   openapi_types.UUID `json:"id"`
+
+	// LastPurchasedOn A date in the shop's own time, YYYY-MM-DD.
+	LastPurchasedOn *LocalDate `json:"lastPurchasedOn,omitempty"`
+
+	// LastQuantity How many its latest purchase took.
+	LastQuantity *float64 `json:"lastQuantity,omitempty"`
+
+	// LastUnitPriceFils The unit price of its latest purchase.
+	LastUnitPriceFils *int64 `json:"lastUnitPriceFils,omitempty"`
+
+	// Name As the invoice names it, e.g. "Rainbow evaporated milk, 48 x 170 g".
+	Name string `json:"name"`
+}
+
+// Purchase defines model for Purchase.
+type Purchase struct {
+	CreatedAt     time.Time `json:"createdAt"`
+	CreatedByName string    `json:"createdByName"`
+
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date          LocalDate          `json:"date"`
+	Id            openapi_types.UUID `json:"id"`
+	Lines         []PurchaseLine     `json:"lines"`
+	Reference     string             `json:"reference"`
+	ShopId        openapi_types.UUID `json:"shopId"`
+	Supplier      *Supplier          `json:"supplier,omitempty"`
+	TotalFils     int64              `json:"totalFils"`
+	UpdatedAt     *time.Time         `json:"updatedAt,omitempty"`
+	UpdatedByName *string            `json:"updatedByName,omitempty"`
+}
+
+// PurchaseInput defines model for PurchaseInput.
+type PurchaseInput struct {
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date  LocalDate           `json:"date"`
+	Lines []PurchaseLineInput `json:"lines"`
+
+	// Reference The invoice or receipt number.
+	Reference  *string             `json:"reference,omitempty"`
+	ShopId     openapi_types.UUID  `json:"shopId"`
+	SupplierId *openapi_types.UUID `json:"supplierId,omitempty"`
+
+	// SupplierName A supplier by name, added if it is new. Neither, for a one-off from anywhere.
+	SupplierName *string `json:"supplierName,omitempty"`
+}
+
+// PurchaseLine defines model for PurchaseLine.
+type PurchaseLine struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area          Area               `json:"area"`
+	ProductId     openapi_types.UUID `json:"productId"`
+	ProductName   string             `json:"productName"`
+	Quantity      float64            `json:"quantity"`
+	TotalFils     int64              `json:"totalFils"`
+	UnitPriceFils int64              `json:"unitPriceFils"`
+}
+
+// PurchaseLineInput defines model for PurchaseLineInput.
+type PurchaseLineInput struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area Area `json:"area"`
+
+	// ProductId A known product; or leave it out and give productName.
+	ProductId *openapi_types.UUID `json:"productId,omitempty"`
+
+	// ProductName A product by name, added if it is new.
+	ProductName *string `json:"productName,omitempty"`
+
+	// Quantity Up to 3 decimals, e.g. 2, or 1.5 for kilos.
+	Quantity float64 `json:"quantity"`
+
+	// TotalFils The line's amount, as the invoice has it.
+	TotalFils     int64 `json:"totalFils"`
+	UnitPriceFils int64 `json:"unitPriceFils"`
+}
+
+// PurchaseList defines model for PurchaseList.
+type PurchaseList struct {
+	// Areas Every area, in order, with what was bought for it.
+	Areas []AreaSpend `json:"areas"`
+
+	// From A date in the shop's own time, YYYY-MM-DD.
+	From      LocalDate  `json:"from"`
+	Purchases []Purchase `json:"purchases"`
+
+	// SalesFils Sales less refunds in the same dates, by business day.
+	SalesFils int64 `json:"salesFils"`
+
+	// To A date in the shop's own time, YYYY-MM-DD.
+	To LocalDate `json:"to"`
+
+	// TotalFils All that was bought.
+	TotalFils int64 `json:"totalFils"`
+}
+
 // RefundEvent defines model for RefundEvent.
 type RefundEvent struct {
 	ApprovedBy     openapi_types.UUID `json:"approvedBy"`
@@ -645,6 +789,12 @@ type StaffSales struct {
 	StaffId   openapi_types.UUID `json:"staffId"`
 }
 
+// Supplier defines model for Supplier.
+type Supplier struct {
+	Id   openapi_types.UUID `json:"id"`
+	Name string             `json:"name"`
+}
+
 // SyncCategory defines model for SyncCategory.
 type SyncCategory struct {
 	Archived bool               `json:"archived"`
@@ -767,6 +917,15 @@ type UserRole string
 // ID defines model for ID.
 type ID = openapi_types.UUID
 
+// ListPurchasesParams defines parameters for ListPurchases.
+type ListPurchasesParams struct {
+	From LocalDate `form:"from" json:"from"`
+	To   LocalDate `form:"to" json:"to"`
+
+	// ShopId One shop. Without it, every shop of the organization.
+	ShopId *openapi_types.UUID `form:"shopId,omitempty" json:"shopId,omitempty"`
+}
+
 // GetSalesReportParams defines parameters for GetSalesReport.
 type GetSalesReportParams struct {
 	From LocalDate `form:"from" json:"from"`
@@ -807,6 +966,12 @@ type UpdateModifierGroupJSONRequestBody = ModifierGroupInput
 
 // MoveModifierGroupJSONRequestBody defines body for MoveModifierGroup for application/json ContentType.
 type MoveModifierGroupJSONRequestBody = Move
+
+// CreatePurchaseJSONRequestBody defines body for CreatePurchase for application/json ContentType.
+type CreatePurchaseJSONRequestBody = PurchaseInput
+
+// UpdatePurchaseJSONRequestBody defines body for UpdatePurchase for application/json ContentType.
+type UpdatePurchaseJSONRequestBody = PurchaseInput
 
 // SignInJSONRequestBody defines body for SignIn for application/json ContentType.
 type SignInJSONRequestBody = SignIn
@@ -873,6 +1038,23 @@ type ServerInterface interface {
 
 	// (POST /v1/admin/modifier-groups/{id}/move)
 	MoveModifierGroup(w http.ResponseWriter, r *http.Request, id ID)
+	// ListProducts What the organization buys, by name, with what its latest purchase paid.
+	// (GET /v1/admin/products)
+	ListProducts(w http.ResponseWriter, r *http.Request)
+	// ListPurchases The purchases between two dates, both included, at most 366 days
+	// apart, latest first, with what was bought per area against that
+	// area's sales.
+	// (GET /v1/admin/purchases)
+	ListPurchases(w http.ResponseWriter, r *http.Request, params ListPurchasesParams)
+	// CreatePurchase Records a purchase, adding its supplier and new products as it goes.
+	// (POST /v1/admin/purchases)
+	CreatePurchase(w http.ResponseWriter, r *http.Request)
+	// DeletePurchase Deletes a purchase. It is kept, marked deleted, for the record.
+	// (DELETE /v1/admin/purchases/{id})
+	DeletePurchase(w http.ResponseWriter, r *http.Request, id ID)
+	// UpdatePurchase Saves a purchase; its lines are replaced by those given.
+	// (PUT /v1/admin/purchases/{id})
+	UpdatePurchase(w http.ResponseWriter, r *http.Request, id ID)
 	// GetSalesReport What the shops took between two business dates, both included, at
 	// most 366 days apart. Sales and refunds count on the business day the
 	// till had open, as on its own day report.
@@ -893,6 +1075,9 @@ type ServerInterface interface {
 	// UpdateStaff Saves a person. A PIN given becomes their new starting PIN.
 	// (PUT /v1/admin/staff/{id})
 	UpdateStaff(w http.ResponseWriter, r *http.Request, id ID)
+	// ListSuppliers The organization's suppliers, by name.
+	// (GET /v1/admin/suppliers)
+	ListSuppliers(w http.ResponseWriter, r *http.Request)
 	// ListTerminals The tills of the organization's shops.
 	// (GET /v1/admin/terminals)
 	ListTerminals(w http.ResponseWriter, r *http.Request)
@@ -1246,6 +1431,145 @@ func (siw *ServerInterfaceWrapper) MoveModifierGroup(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListProducts operation middleware
+func (siw *ServerInterfaceWrapper) ListProducts(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProducts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPurchases operation middleware
+func (siw *ServerInterfaceWrapper) ListPurchases(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPurchasesParams
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "shopId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "shopId", r.URL.Query(), &params.ShopId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "shopId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "shopId", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPurchases(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePurchase operation middleware
+func (siw *ServerInterfaceWrapper) CreatePurchase(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePurchase(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePurchase operation middleware
+func (siw *ServerInterfaceWrapper) DeletePurchase(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePurchase(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePurchase operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePurchase(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePurchase(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSalesReport operation middleware
 func (siw *ServerInterfaceWrapper) GetSalesReport(w http.ResponseWriter, r *http.Request) {
 
@@ -1378,6 +1702,20 @@ func (siw *ServerInterfaceWrapper) UpdateStaff(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateStaff(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSuppliers operation middleware
+func (siw *ServerInterfaceWrapper) ListSuppliers(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSuppliers(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1688,6 +2026,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/terminals/{id}/pairing-code", wrapper.CreatePairingCode)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/terminals/{id}", wrapper.UnpairTerminal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/reports/sales", wrapper.GetSalesReport)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/purchases", wrapper.ListPurchases)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/purchases", wrapper.CreatePurchase)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/purchases/{id}", wrapper.DeletePurchase)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/purchases/{id}", wrapper.UpdatePurchase)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/suppliers", wrapper.ListSuppliers)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/products", wrapper.ListProducts)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/terminal/pair", wrapper.PairTerminal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/terminal/changes", wrapper.GetChanges)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/terminal/events", wrapper.SendEvents)

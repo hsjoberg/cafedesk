@@ -909,6 +909,97 @@ fieldset.bare {
   padding: 0 4px;
 }
 
+/* Purchases. */
+
+.invoice > *,
+.invoice .field {
+  min-width: 0;
+}
+.invoice .btn.copy {
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 10px 14px;
+}
+.table tr.all > * {
+  border-top: 1px solid var(--rule);
+  font-weight: 500;
+}
+.purchase-list button {
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 14px;
+}
+.purchase-list .when {
+  color: var(--ink-muted);
+  font-size: var(--fs-meta);
+}
+.purchase-list .what {
+  display: grid;
+  min-width: 0;
+}
+.purchase-list .what .meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.purchase-list .amount {
+  font-weight: 500;
+}
+/* The editor reads like the invoice being copied. */
+.invoice .line {
+  gap: 6px;
+}
+.line-figures {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr 1fr;
+  gap: 8px;
+}
+.line-figures .field > span:first-child {
+  font-size: 13px;
+}
+.line .input,
+.line-figures .input {
+  font-size: var(--fs-body);
+  min-height: 44px;
+  padding: 8px 10px;
+}
+.line-figures .input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.area-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.area-pick .input {
+  width: auto;
+}
+.invoice-foot {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--rule);
+}
+.invoice-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--fs-item);
+}
+.invoice-total strong {
+  font-size: var(--fs-key);
+  font-weight: 500;
+}
+.invoice-foot .matches {
+  color: var(--ink);
+  margin: 0;
+}
+.invoice-foot .error {
+  margin: 0;
+}
+
 /* The sign-in page. */
 
 .signin {
@@ -994,6 +1085,14 @@ fieldset.bare {
   .topbar .who {
     display: none;
   }
+  /* Six sections: the top bar's links scroll rather than spill. */
+  .nav {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .purchase-list button {
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+  }
   /* Sales: the slip first, then the rest. */
   .sales .slip-wrap {
     order: -1;
@@ -1015,4 +1114,10 @@ fieldset.bare {
   .btn:active:not(:disabled) {
     transform: none;
   }
+}
+
+/* Date inputs keep to their column. */
+.invoice input[type="date"] {
+  min-width: 0;
+  width: 100%;
 }

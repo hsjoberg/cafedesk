@@ -3,6 +3,7 @@ import { For, Match, onMount, Switch } from "solid-js";
 import { api, call, whenSignedOut } from "./api/client";
 import { MenuPage } from "./pages/MenuPage";
 import { OptionsPage } from "./pages/OptionsPage";
+import { PurchasesPage } from "./pages/PurchasesPage";
 import { SalesPage } from "./pages/SalesPage";
 import { SignInPage } from "./pages/SignInPage";
 import { StaffPage } from "./pages/StaffPage";
@@ -16,6 +17,7 @@ export function App() {
       <Route path="/" component={SignedIn}>
         <Route path="/" component={() => <Navigate href="/sales" />} />
         <Route path="/sales" component={SalesPage} />
+        <Route path="/purchases" component={PurchasesPage} />
         <Route path="/menu" component={MenuPage} />
         <Route path="/options" component={OptionsPage} />
         <Route path="/staff" component={StaffPage} />
@@ -74,6 +76,7 @@ function TopBar() {
       </div>
       <nav class="nav" aria-label="Sections">
         <A href="/sales">Sales</A>
+        <A href="/purchases">Purchases</A>
         <A href="/menu">Menu</A>
         <A href="/options">Options</A>
         <A href="/staff">Staff</A>

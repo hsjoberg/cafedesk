@@ -363,6 +363,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/purchases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The purchases between two dates, both included, at most 366 days
+         *     apart, latest first, with what was bought per area against that
+         *     area's sales.
+         */
+        get: operations["listPurchases"];
+        put?: never;
+        /** Records a purchase, adding its supplier and new products as it goes. */
+        post: operations["createPurchase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/purchases/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Saves a purchase; its lines are replaced by those given. */
+        put: operations["updatePurchase"];
+        post?: never;
+        /** Deletes a purchase. It is kept, marked deleted, for the record. */
+        delete: operations["deletePurchase"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/suppliers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The organization's suppliers, by name. */
+        get: operations["listSuppliers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What the organization buys, by name, with what its latest purchase paid. */
+        get: operations["listProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/terminal/pair": {
         parameters: {
             query?: never;
@@ -759,6 +835,128 @@ export interface components {
              * @description Counted less expected; below 0 is short.
              */
             differenceFils?: number;
+        };
+        /**
+         * @description Where a purchase goes: the counter (tea and drinks), the kitchen,
+         *     packaging (cups, boxes, bags), or other.
+         * @enum {string}
+         */
+        Area: "counter" | "kitchen" | "packaging" | "other";
+        Supplier: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        Product: {
+            /** Format: uuid */
+            id: string;
+            /** @description As the invoice names it, e.g. "Rainbow evaporated milk, 48 x 170 g". */
+            name: string;
+            area: components["schemas"]["Area"];
+            /**
+             * Format: int64
+             * @description The unit price of its latest purchase.
+             */
+            lastUnitPriceFils?: number;
+            /**
+             * Format: double
+             * @description How many its latest purchase took.
+             */
+            lastQuantity?: number;
+            lastPurchasedOn?: components["schemas"]["LocalDate"];
+        };
+        PurchaseLineInput: {
+            /**
+             * Format: uuid
+             * @description A known product; or leave it out and give productName.
+             */
+            productId?: string;
+            /** @description A product by name, added if it is new. */
+            productName?: string;
+            area: components["schemas"]["Area"];
+            /**
+             * Format: double
+             * @description Up to 3 decimals, e.g. 2, or 1.5 for kilos.
+             */
+            quantity: number;
+            /** Format: int64 */
+            unitPriceFils: number;
+            /**
+             * Format: int64
+             * @description The line's amount, as the invoice has it.
+             */
+            totalFils: number;
+        };
+        PurchaseLine: {
+            /** Format: uuid */
+            productId: string;
+            productName: string;
+            area: components["schemas"]["Area"];
+            /** Format: double */
+            quantity: number;
+            /** Format: int64 */
+            unitPriceFils: number;
+            /** Format: int64 */
+            totalFils: number;
+        };
+        PurchaseInput: {
+            /** Format: uuid */
+            shopId: string;
+            date: components["schemas"]["LocalDate"];
+            /** Format: uuid */
+            supplierId?: string;
+            /** @description A supplier by name, added if it is new. Neither, for a one-off from anywhere. */
+            supplierName?: string;
+            /** @description The invoice or receipt number. */
+            reference?: string;
+            lines: components["schemas"]["PurchaseLineInput"][];
+        };
+        Purchase: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            shopId: string;
+            date: components["schemas"]["LocalDate"];
+            supplier?: components["schemas"]["Supplier"];
+            reference: string;
+            /** Format: int64 */
+            totalFils: number;
+            lines: components["schemas"]["PurchaseLine"][];
+            /** Format: date-time */
+            createdAt: string;
+            createdByName: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            updatedByName?: string;
+        };
+        PurchaseList: {
+            from: components["schemas"]["LocalDate"];
+            to: components["schemas"]["LocalDate"];
+            purchases: components["schemas"]["Purchase"][];
+            /** @description Every area, in order, with what was bought for it. */
+            areas: components["schemas"]["AreaSpend"][];
+            /**
+             * Format: int64
+             * @description All that was bought.
+             */
+            totalFils: number;
+            /**
+             * Format: int64
+             * @description Sales less refunds in the same dates, by business day.
+             */
+            salesFils: number;
+        };
+        AreaSpend: {
+            area: components["schemas"]["Area"];
+            /** Format: int64 */
+            boughtFils: number;
+            /**
+             * Format: int64
+             * @description The area's own sales less refunds: the counter's are items not on
+             *     the kitchen ticket, the kitchen's are items on it. Missing for
+             *     packaging and other, which serve all sales.
+             */
+            salesFils?: number;
         };
         PairRequest: {
             code: string;
@@ -1628,6 +1826,148 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+        };
+    };
+    listPurchases: {
+        parameters: {
+            query: {
+                from: components["schemas"]["LocalDate"];
+                to: components["schemas"]["LocalDate"];
+                /** @description One shop. Without it, every shop of the organization. */
+                shopId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The purchases. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseList"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    createPurchase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurchaseInput"];
+            };
+        };
+        responses: {
+            /** @description Recorded. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Purchase"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updatePurchase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurchaseInput"];
+            };
+        };
+        responses: {
+            /** @description Saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Purchase"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deletePurchase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    listSuppliers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The suppliers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Supplier"][];
+                };
+            };
+        };
+    };
+    listProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The products. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"][];
+                };
+            };
         };
     };
     pairTerminal: {

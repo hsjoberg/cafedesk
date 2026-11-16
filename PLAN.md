@@ -229,7 +229,8 @@ that exists:
 ### Phase 3: Costs and margins (about 2 weeks)
 **Status (2026-11-16):** step 1 is done: a cost per item and per option, kept
 as a history so a change never rewrites past profit, and profit on the Sales
-page. Step 2 is next. See [docs/phase3.md](docs/phase3.md).
+page. Step 2.1, purchases, is done too. Next: products and ingredients.
+See [docs/phase3.md](docs/phase3.md).
 
 1. Simple: one manual cost per item, giving margin per item.
 2. Proper, in this order:

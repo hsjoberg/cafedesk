@@ -77,3 +77,24 @@ export const presets: Preset[] = [
     },
   },
 ];
+
+/** The Monday of a date's week, as weeks run in the UAE. */
+export function weekStart(date: string): string {
+  const day = utc(date).getUTCDay(); // 0 is Sunday
+  return addDays(date, -((day + 6) % 7));
+}
+
+/** Ranges for purchases, which come weekly: days alone mean little. */
+export const purchasePresets: Preset[] = [
+  { id: "week", label: "This week", range: (t) => [weekStart(t), t] },
+  {
+    id: "last-week",
+    label: "Last week",
+    range: (t) => {
+      const start = addDays(weekStart(t), -7);
+      return [start, addDays(start, 6)];
+    },
+  },
+  presets.find((p) => p.id === "month")!,
+  presets.find((p) => p.id === "last-month")!,
+];

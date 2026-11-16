@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
 
@@ -468,6 +468,119 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+
+  /v1/admin/purchases:
+    get:
+      operationId: listPurchases
+      summary: |
+        The purchases between two dates, both included, at most 366 days
+        apart, latest first, with what was bought per area against that
+        area's sales.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/LocalDate"
+        - name: to
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/LocalDate"
+        - name: shopId
+          in: query
+          description: One shop. Without it, every shop of the organization.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The purchases.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseList"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createPurchase
+      summary: Records a purchase, adding its supplier and new products as it goes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseInput"
+      responses:
+        "201":
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/admin/purchases/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updatePurchase
+      summary: Saves a purchase; its lines are replaced by those given.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deletePurchase
+      summary: Deletes a purchase. It is kept, marked deleted, for the record.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/admin/suppliers:
+    get:
+      operationId: listSuppliers
+      summary: The organization's suppliers, by name.
+      responses:
+        "200":
+          description: The suppliers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Supplier"
+  /v1/admin/products:
+    get:
+      operationId: listProducts
+      summary: What the organization buys, by name, with what its latest purchase paid.
+      responses:
+        "200":
+          description: The products.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
 
   /v1/terminal/pair:
     post:
@@ -1153,6 +1266,186 @@ components:
           type: integer
           format: int64
           description: Counted less expected; below 0 is short.
+
+    Area:
+      type: string
+      enum: [counter, kitchen, packaging, other]
+      description: |
+        Where a purchase goes: the counter (tea and drinks), the kitchen,
+        packaging (cups, boxes, bags), or other.
+    Supplier:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    Product:
+      type: object
+      required: [id, name, area]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: As the invoice names it, e.g. "Rainbow evaporated milk, 48 x 170 g".
+        area:
+          $ref: "#/components/schemas/Area"
+        lastUnitPriceFils:
+          type: integer
+          format: int64
+          description: The unit price of its latest purchase.
+        lastQuantity:
+          type: number
+          format: double
+          description: How many its latest purchase took.
+        lastPurchasedOn:
+          $ref: "#/components/schemas/LocalDate"
+    PurchaseLineInput:
+      type: object
+      required: [area, quantity, unitPriceFils, totalFils]
+      properties:
+        productId:
+          type: string
+          format: uuid
+          description: A known product; or leave it out and give productName.
+        productName:
+          type: string
+          description: A product by name, added if it is new.
+        area:
+          $ref: "#/components/schemas/Area"
+        quantity:
+          type: number
+          format: double
+          description: Up to 3 decimals, e.g. 2, or 1.5 for kilos.
+        unitPriceFils:
+          type: integer
+          format: int64
+          minimum: 0
+        totalFils:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The line's amount, as the invoice has it.
+    PurchaseLine:
+      type: object
+      required: [productId, productName, area, quantity, unitPriceFils, totalFils]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        productName:
+          type: string
+        area:
+          $ref: "#/components/schemas/Area"
+        quantity:
+          type: number
+          format: double
+        unitPriceFils:
+          type: integer
+          format: int64
+        totalFils:
+          type: integer
+          format: int64
+    PurchaseInput:
+      type: object
+      required: [shopId, date, lines]
+      properties:
+        shopId:
+          type: string
+          format: uuid
+        date:
+          $ref: "#/components/schemas/LocalDate"
+        supplierId:
+          type: string
+          format: uuid
+        supplierName:
+          type: string
+          description: A supplier by name, added if it is new. Neither, for a one-off from anywhere.
+        reference:
+          type: string
+          description: The invoice or receipt number.
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseLineInput"
+    Purchase:
+      type: object
+      required: [id, shopId, date, reference, totalFils, lines, createdAt, createdByName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        shopId:
+          type: string
+          format: uuid
+        date:
+          $ref: "#/components/schemas/LocalDate"
+        supplier:
+          $ref: "#/components/schemas/Supplier"
+        reference:
+          type: string
+        totalFils:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/PurchaseLine"
+        createdAt:
+          type: string
+          format: date-time
+        createdByName:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        updatedByName:
+          type: string
+    PurchaseList:
+      type: object
+      required: [from, to, purchases, areas, totalFils, salesFils]
+      properties:
+        from:
+          $ref: "#/components/schemas/LocalDate"
+        to:
+          $ref: "#/components/schemas/LocalDate"
+        purchases:
+          type: array
+          items:
+            $ref: "#/components/schemas/Purchase"
+        areas:
+          type: array
+          description: Every area, in order, with what was bought for it.
+          items:
+            $ref: "#/components/schemas/AreaSpend"
+        totalFils:
+          type: integer
+          format: int64
+          description: All that was bought.
+        salesFils:
+          type: integer
+          format: int64
+          description: Sales less refunds in the same dates, by business day.
+    AreaSpend:
+      type: object
+      required: [area, boughtFils]
+      properties:
+        area:
+          $ref: "#/components/schemas/Area"
+        boughtFils:
+          type: integer
+          format: int64
+        salesFils:
+          type: integer
+          format: int64
+          description: |
+            The area's own sales less refunds: the counter's are items not on
+            the kitchen ticket, the kitchen's are items on it. Missing for
+            packaging and other, which serve all sales.
 
     PairRequest:
       type: object

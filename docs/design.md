@@ -270,6 +270,42 @@ figures. It replaces a row of stat cards, which would be the generic answer.
   the slip, as its later sales aren't in yet.
 - Phones: the slip comes first, full width, then the rest.
 
+### Purchases
+
+**Who and why.** Whoever copies the week's wholesale invoice in, once a
+week, with the paper beside them; and the owner, asking where the money went
+and whether the kitchen's spending fits its sales.
+
+**The memorable thing: the editor is the invoice.** Where the till keeps its
+receipt strip, the editor reads like the paper being copied: lines of product,
+quantity, unit price and amount, a running total at the foot, and a box for
+the invoice's own total that says whether the lines match it. A typo shows
+before it is saved, not at the month's end.
+
+```
+┌ Sales Purchases Menu … ───────────────────────────────────────────────────┐
+│ Purchases  [This week] [Last week] [This month] [Last month] from–to [Add] │
+├─────────────────────────────────────────────┬─────────────────────────────┤
+│ Where the money went                        │ New purchase                │
+│  Counter    1,240  of 9,800 counter sales 13%│ Date [12 Nov]  Supplier [  ]│
+│  Kitchen    2,900  of 6,200 kitchen sales 47%│ Invoice no.                 │
+│  Packaging    180                           │ ┌ Evaporated milk 48×170 g ┐│
+│  Other         25                           │ │ Counter  2 × 105.00 210.00││
+│  All        4,345  of 16,000 sales      27% │ └──────────────────────────┘│
+│                                             │ + Add a line                │
+│ 12 Nov  Demo Wholesale  INV-1043   2,840.00 │ Total              2,840.00 │
+│ 10 Nov  Bought nearby               61.00   │ Invoice total [2,840.00] ✓  │
+└─────────────────────────────────────────────┴─────────────────────────────┘
+```
+
+- The share is plain words: "47% of kitchen sales". Packaging and other
+  serve all sales and say so. A share is only as good as the dates: a weekly
+  invoice makes single days meaningless, so the page opens on this month.
+- A known product fills in its area and last price; "Copy the last invoice"
+  starts a supplier's new invoice from its previous lines, prices kept and
+  quantities empty, so the week's work is the quantities.
+- No colors beyond the tokens; no chart: four areas read best as a table.
+
 ## Not designed yet
 
 The Checks screen of Phase 0 is a diagnostic page, styled with the same tokens

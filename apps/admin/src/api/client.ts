@@ -18,6 +18,12 @@ export type Terminal = Schemas["Terminal"];
 export type TerminalPairing = Schemas["TerminalPairing"];
 export type SalesReport = Schemas["SalesReport"];
 export type DayClose = Schemas["DayClose"];
+export type Area = Schemas["Area"];
+export type Product = Schemas["Product"];
+export type Supplier = Schemas["Supplier"];
+export type Purchase = Schemas["Purchase"];
+export type PurchaseInput = Schemas["PurchaseInput"];
+export type PurchaseList = Schemas["PurchaseList"];
 
 // Same origin: the server serves the admin, and Vite passes /v1 to it in
 // development.
