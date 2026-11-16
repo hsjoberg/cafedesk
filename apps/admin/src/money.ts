@@ -7,6 +7,13 @@ export function formatFils(fils: number): string {
   return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
 }
 
+const grouped = new Intl.NumberFormat("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Formats fils with thousands grouped, as "1,234.50". */
+export function formatAmount(fils: number): string {
+  return grouped.format(fils / 100);
+}
+
 /**
  * Reads an amount typed in dirhams, as "2", "2.5" or "2.50", into fils.
  * Returns null for anything else. A leading minus is allowed when signed.

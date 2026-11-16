@@ -170,8 +170,8 @@ manager-only Settings screen with an on-screen keyboard.
 **Status (2026-11-16):** sync is done: the Postgres schema and migrations,
 `setup`, admin sign-in, menu management, till staff managed in the admin,
 pairing tills, menu and staff down, and sales, voids, refunds, days and PIN
-changes up. Reports in the admin are next, then Phase 3. See
-[docs/phase2.md](docs/phase2.md).
+changes up, and the Sales page in the admin. Phase 2 is done; Phase 3 is
+next. See [docs/phase2.md](docs/phase2.md).
 
 Choices made while building it:
 - The OpenAPI spec is **3.0.3**, not 3.1: the Go generator (`oapi-codegen`)

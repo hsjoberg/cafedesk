@@ -16,6 +16,8 @@ export type ModifierInput = Schemas["ModifierInput"];
 export type Staff = Schemas["Staff"];
 export type Terminal = Schemas["Terminal"];
 export type TerminalPairing = Schemas["TerminalPairing"];
+export type SalesReport = Schemas["SalesReport"];
+export type DayClose = Schemas["DayClose"];
 
 // Same origin: the server serves the admin, and Vite passes /v1 to it in
 // development.

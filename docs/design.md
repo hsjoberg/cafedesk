@@ -224,6 +224,52 @@ on phones to keep the top bar on one line with Sign out.
   "Unpaired" or "Sync stopped" shows by the clock in chili only when something
   needs a look, and the till menu and Settings give the sentence.
 
+### Sales
+
+**Who and why.** The owner, in the evening or at the end of the week, asks
+two things first: how much did we take, and does the cash add up? Then:
+what sold, when it was busy, and on which till and by whom.
+
+**The memorable thing: the slip.** The editor's place on the right, where
+the till keeps its receipt strip, holds the report's totals as the till
+prints its day report: paper, label left and amount right, rules between
+groups. Net sales leads at 48, in the same Readex Pro, with proportional
+figures. It replaces a row of stat cards, which would be the generic answer.
+
+```
+┌ Menu Options Staff Tills Sales ─────────────────────────────────────────┐
+│ Sales  [Today] [Yesterday] [Last 7 days] [This month] [Last month] from–to│
+├─────────────────────────────────────────────┬───────────────────────────┤
+│ Sales by hour            [By day] [By hour] │ ░ paper slip ░            │
+│  ┃     ┃ ┃                                  │ Sat 14 Nov                │
+│  ┃ ┃ ┃ ┃ ┃ ┃                                │ Net sales                 │
+│ ─┸─┸─┸─┸─┸─┸─ 7  8  9 …                     │ AED 1,234.50              │
+│ Show as a table                             │ 86 orders, 14.35 average  │
+│                                             │ ───────────────────────── │
+│ Cash counts  (each till's day: expected,    │ Sales               1,334 │
+│   counted, short or over)                   │ Refunds (2)          -100 │
+│ What sold    (ranked, a thin bar per row)   │ Cash / Card               │
+│ Tills | Staff                               │ Voided, not counted (1)   │
+└─────────────────────────────────────────────┴───────────────────────────┘
+```
+
+- **Filters**: one row above everything, presets first, then the two dates.
+  The range lives in the address, so a reload or a shared link keeps it.
+  Dates are the shop's business dates, in its time zone.
+- **The chart**: one series, one color. Cardamom `#1E7B57`, a green kin to
+  ink, passes the dataviz checks on tile and paper (ink itself reads as gray
+  at chart size). Columns at most 24 wide, 4 px rounded tops, square at the
+  baseline; hairline grid in `--rule`; amounts in whole dirhams on the axis.
+  Each column shows its value and orders on hover and on keyboard focus, and
+  the same numbers are a table one button away. One day is by hour; a range
+  is by day, with by hour one tap away. While a new range loads, the old one
+  stays, dimmed.
+- **Short and over**: "50.00 short" in chili, with the word, never the color
+  alone. Over and exact stay ink.
+- **Honesty**: a till that hasn't been in touch for 15 minutes is named under
+  the slip, as its later sales aren't in yet.
+- Phones: the slip comes first, full width, then the rest.
+
 ## Not designed yet
 
 The Checks screen of Phase 0 is a diagnostic page, styled with the same tokens

@@ -196,6 +196,42 @@ type Changes struct {
 	Version int64 `json:"version"`
 }
 
+// DayClose defines model for DayClose.
+type DayClose struct {
+	CashRefundsFils int64 `json:"cashRefundsFils"`
+	CashSalesFils   int64 `json:"cashSalesFils"`
+
+	// ClosedAt Missing while the day is open, or its close hasn't been sent yet.
+	ClosedAt     *time.Time `json:"closedAt,omitempty"`
+	ClosedByName *string    `json:"closedByName,omitempty"`
+	CountedFils  *int64     `json:"countedFils,omitempty"`
+
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date LocalDate `json:"date"`
+
+	// DifferenceFils Counted less expected; below 0 is short.
+	DifferenceFils *int64 `json:"differenceFils,omitempty"`
+
+	// ExpectedFils The float, plus cash sales, less cash refunds.
+	ExpectedFils int64              `json:"expectedFils"`
+	FloatFils    int64              `json:"floatFils"`
+	Id           openapi_types.UUID `json:"id"`
+	OpenedAt     time.Time          `json:"openedAt"`
+	OpenedByName string             `json:"openedByName"`
+	TerminalCode string             `json:"terminalCode"`
+	TerminalName string             `json:"terminalName"`
+}
+
+// DaySales defines model for DaySales.
+type DaySales struct {
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date        LocalDate `json:"date"`
+	GrossFils   int64     `json:"grossFils"`
+	NetFils     int64     `json:"netFils"`
+	Orders      int       `json:"orders"`
+	RefundsFils int64     `json:"refundsFils"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	Error struct {
@@ -248,6 +284,13 @@ type EventResult struct {
 	Rejected *EventRejection `json:"rejected,omitempty"`
 }
 
+// HourSales defines model for HourSales.
+type HourSales struct {
+	GrossFils int64 `json:"grossFils"`
+	Hour      int   `json:"hour"`
+	Orders    int   `json:"orders"`
+}
+
 // Item defines model for Item.
 type Item struct {
 	CategoryId openapi_types.UUID `json:"categoryId"`
@@ -277,6 +320,19 @@ type ItemInput struct {
 	NameAr           *string              `json:"nameAr,omitempty"`
 	PriceFils        int64                `json:"priceFils"`
 }
+
+// ItemSales defines model for ItemSales.
+type ItemSales struct {
+	GrossFils int64  `json:"grossFils"`
+	ItemId    string `json:"itemId"`
+
+	// Name The name it last sold under.
+	Name string `json:"name"`
+	Qty  int    `json:"qty"`
+}
+
+// LocalDate A date in the shop's own time, YYYY-MM-DD.
+type LocalDate = string
 
 // Me defines model for Me.
 type Me struct {
@@ -446,6 +502,48 @@ type RefundLineEvent struct {
 	Qty         int                `json:"qty"`
 }
 
+// SalesReport defines model for SalesReport.
+type SalesReport struct {
+	// Closes Each till's business days, latest first, with their cash counts.
+	Closes []DayClose `json:"closes"`
+
+	// Days Every date from `from` to `to`, days without sales too.
+	Days []DaySales `json:"days"`
+
+	// From A date in the shop's own time, YYYY-MM-DD.
+	From LocalDate `json:"from"`
+
+	// Hours All 24 hours of the clock, in the shop's time, over the whole range.
+	Hours []HourSales `json:"hours"`
+
+	// Items What sold, most taken first.
+	Items []ItemSales  `json:"items"`
+	Staff []StaffSales `json:"staff"`
+	Tills []TillSales  `json:"tills"`
+
+	// To A date in the shop's own time, YYYY-MM-DD.
+	To     LocalDate   `json:"to"`
+	Totals SalesTotals `json:"totals"`
+}
+
+// SalesTotals defines model for SalesTotals.
+type SalesTotals struct {
+	CardFils  int64 `json:"cardFils"`
+	CashFils  int64 `json:"cashFils"`
+	GrossFils int64 `json:"grossFils"`
+
+	// NetFils Sales less refunds.
+	NetFils int64 `json:"netFils"`
+
+	// Orders Completed orders; voided ones aren't sales.
+	Orders          int   `json:"orders"`
+	Refunds         int   `json:"refunds"`
+	RefundsCashFils int64 `json:"refundsCashFils"`
+	RefundsFils     int64 `json:"refundsFils"`
+	Voids           int   `json:"voids"`
+	VoidsFils       int64 `json:"voidsFils"`
+}
+
 // Shop defines model for Shop.
 type Shop struct {
 	Currency string             `json:"currency"`
@@ -504,6 +602,14 @@ type StaffPinEvent struct {
 
 // StaffRole Managers also approve voids, refunds and closing the day on the till.
 type StaffRole string
+
+// StaffSales defines model for StaffSales.
+type StaffSales struct {
+	GrossFils int64              `json:"grossFils"`
+	Name      string             `json:"name"`
+	Orders    int                `json:"orders"`
+	StaffId   openapi_types.UUID `json:"staffId"`
+}
 
 // SyncCategory defines model for SyncCategory.
 type SyncCategory struct {
@@ -602,6 +708,17 @@ type TerminalPairing struct {
 	Terminal  Terminal  `json:"terminal"`
 }
 
+// TillSales defines model for TillSales.
+type TillSales struct {
+	Code        string             `json:"code"`
+	GrossFils   int64              `json:"grossFils"`
+	Name        string             `json:"name"`
+	NetFils     int64              `json:"netFils"`
+	Orders      int                `json:"orders"`
+	RefundsFils int64              `json:"refundsFils"`
+	TerminalId  openapi_types.UUID `json:"terminalId"`
+}
+
 // User defines model for User.
 type User struct {
 	Email string             `json:"email"`
@@ -615,6 +732,15 @@ type UserRole string
 
 // ID defines model for ID.
 type ID = openapi_types.UUID
+
+// GetSalesReportParams defines parameters for GetSalesReport.
+type GetSalesReportParams struct {
+	From LocalDate `form:"from" json:"from"`
+	To   LocalDate `form:"to" json:"to"`
+
+	// ShopId One shop. Without it, every shop of the organization.
+	ShopId *openapi_types.UUID `form:"shopId,omitempty" json:"shopId,omitempty"`
+}
 
 // GetChangesParams defines parameters for GetChanges.
 type GetChangesParams struct {
@@ -713,6 +839,11 @@ type ServerInterface interface {
 
 	// (POST /v1/admin/modifier-groups/{id}/move)
 	MoveModifierGroup(w http.ResponseWriter, r *http.Request, id ID)
+	// GetSalesReport What the shops took between two business dates, both included, at
+	// most 366 days apart. Sales and refunds count on the business day the
+	// till had open, as on its own day report.
+	// (GET /v1/admin/reports/sales)
+	GetSalesReport(w http.ResponseWriter, r *http.Request, params GetSalesReportParams)
 	// SignOut Signs out, ending the session.
 	// (DELETE /v1/admin/session)
 	SignOut(w http.ResponseWriter, r *http.Request)
@@ -1072,6 +1203,65 @@ func (siw *ServerInterfaceWrapper) MoveModifierGroup(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.MoveModifierGroup(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSalesReport operation middleware
+func (siw *ServerInterfaceWrapper) GetSalesReport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSalesReportParams
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "shopId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "shopId", r.URL.Query(), &params.ShopId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "shopId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "shopId", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSalesReport(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1463,6 +1653,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/terminals", wrapper.CreateTerminal)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/terminals/{id}/pairing-code", wrapper.CreatePairingCode)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/terminals/{id}", wrapper.UnpairTerminal)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/reports/sales", wrapper.GetSalesReport)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/terminal/pair", wrapper.PairTerminal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/terminal/changes", wrapper.GetChanges)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/terminal/events", wrapper.SendEvents)

@@ -28,6 +28,10 @@
   --ink-muted: #56675f;
   --rule: #aeb7aa;
   --chili: #c23b2e;
+  /* The charts' one series: a green kin to ink, checked with the dataviz
+     validator on tile and paper. Ink itself reads as gray at chart size. */
+  --cardamom: #1e7b57;
+  --cardamom-lift: #2a9468;
   --scrim: rgb(33 58 49 / 0.18);
 
   --fs-meta: 14px;
@@ -533,6 +537,367 @@ fieldset.bare {
   font-weight: 500;
 }
 
+/* Sales. */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* One row of filters above everything they scope: presets, then dates. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: inset 0 -4px 0 transparent;
+}
+.chip:hover {
+  background: var(--tile-pressed);
+}
+.chip[aria-pressed="true"] {
+  background: var(--tile);
+  box-shadow: inset 0 -4px 0 var(--ink);
+}
+.dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 10px;
+}
+.input.date,
+.input.shop {
+  width: auto;
+  min-height: 44px;
+  padding: 6px 10px;
+  font-size: var(--fs-body);
+}
+
+.report {
+  display: grid;
+  gap: 16px;
+  transition: opacity 0.15s;
+}
+/* A new range loading: the old numbers stay, dimmed, with no jump. */
+.stale {
+  opacity: 0.5;
+}
+.panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  background: var(--tile);
+  border-radius: 4px;
+  padding: 18px 20px 20px;
+  min-width: 0;
+}
+.panel h2 {
+  font-size: var(--fs-item);
+  font-weight: 500;
+}
+.panel > .meta,
+.panel > p {
+  margin: 0;
+}
+.panel > .btn {
+  justify-self: start;
+}
+/* Text buttons in a panel line up with its text. */
+.panel > .btn-plain,
+.panel .row > .btn-plain:first-child {
+  margin-left: -12px;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--concrete);
+  border-radius: 6px;
+}
+.segmented button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  cursor: pointer;
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--paper);
+}
+.short {
+  color: var(--chili);
+  font-weight: 500;
+}
+
+/* Tables: figures align in tabular digits, right; names left. */
+.table-wrap {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-body);
+}
+.table th,
+.table td {
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--tile-pressed);
+}
+.table th:first-child,
+.table td:first-child {
+  padding-left: 0;
+}
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
+}
+.table thead th {
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  color: var(--ink-muted);
+  border-bottom-color: var(--rule);
+}
+.table tbody th {
+  font-weight: 500;
+}
+.table .n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.table .who {
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+  padding-top: 11px;
+}
+.table .nowrap,
+.table tbody th {
+  white-space: nowrap;
+}
+.items tbody th,
+.pair tbody th {
+  white-space: normal;
+}
+.table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.items .bar-cell {
+  width: 32%;
+  vertical-align: middle;
+}
+/* A ranked bar: square where it starts, rounded where the value ends. */
+.meter {
+  display: block;
+  height: 10px;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--cardamom);
+}
+
+/* The column chart: one series, thin columns, hairline grid. */
+.chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 200px auto;
+  column-gap: 10px;
+  padding-top: 8px;
+}
+.chart-y {
+  position: relative;
+  min-width: 36px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.chart-y span {
+  position: absolute;
+  right: 0;
+  transform: translateY(50%);
+  line-height: 1;
+}
+.chart-plot {
+  position: relative;
+}
+.chart-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--tile-pressed);
+}
+.chart-grid.base {
+  background: var(--rule);
+}
+.chart-cols {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+.chart-col {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  cursor: default;
+  border-radius: 4px;
+}
+.chart-col.on {
+  background: rgb(33 58 49 / 0.05);
+}
+.chart-col:focus-visible {
+  outline-offset: 0;
+}
+.chart-bar {
+  width: min(24px, 64%);
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  background: var(--cardamom);
+}
+.chart-col.on .chart-bar {
+  background: var(--cardamom-lift);
+}
+.chart-x {
+  grid-column: 2;
+  display: flex;
+  padding-top: 6px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.chart-x span {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: visible;
+}
+.chart-tip {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 1px;
+  padding: 8px 12px;
+  background: var(--paper);
+  border-radius: 4px;
+  box-shadow: 0 2px 10px var(--scrim);
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+.chart-tip.start {
+  transform: translateX(-12px);
+}
+.chart-tip.end {
+  transform: translateX(calc(-100% + 12px));
+}
+.chart-tip strong {
+  color: var(--ink);
+  font-size: var(--fs-body);
+  font-weight: 500;
+}
+
+/* The slip: the totals, printed as the till prints its day report. */
+.slip-wrap {
+  position: sticky;
+  top: 16px;
+  margin: 4px 20px 24px 0;
+  display: grid;
+  gap: 12px;
+}
+.slip {
+  background: var(--paper);
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 2px 12px var(--scrim);
+  padding: 22px 24px 26px;
+  display: grid;
+  gap: 4px;
+  transition: opacity 0.15s;
+  /* A torn paper edge, as the strip leaves the printer. */
+  -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 8px) no-repeat,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 16px 8px repeat-x;
+  mask: linear-gradient(#000 0 0) top / 100% calc(100% - 8px) no-repeat,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 16px 8px repeat-x;
+}
+.slip p {
+  margin: 0;
+}
+.slip-date {
+  font-weight: 500;
+  padding-bottom: 14px;
+}
+.slip-label {
+  color: var(--ink-muted);
+}
+.hero {
+  font-size: 48px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.hero .cur {
+  font-size: var(--fs-price);
+  font-weight: 400;
+  color: var(--ink-muted);
+  letter-spacing: 0;
+}
+.slip-lines {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--rule);
+  display: grid;
+  gap: 6px;
+}
+.slip-lines div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.slip-lines dt {
+  margin: 0;
+}
+.slip-lines dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.behind {
+  margin: 0;
+  padding: 0 4px;
+}
+
 /* The sign-in page. */
 
 .signin {
@@ -557,6 +922,20 @@ fieldset.bare {
 .loading {
   padding: 24px;
   color: var(--ink-muted);
+}
+
+/* The POS PC's 1024 and other mid widths: a narrower slip, more for the
+   tables. */
+@media (max-width: 1199px) {
+  .sales {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .slip {
+    padding: 18px 18px 24px;
+  }
+  .hero {
+    font-size: 40px;
+  }
 }
 
 /* Phones and narrow windows: one column, and the editor as a sheet. */
@@ -603,6 +982,21 @@ fieldset.bare {
   }
   .topbar .who {
     display: none;
+  }
+  /* Sales: the slip first, then the rest. */
+  .sales .slip-wrap {
+    order: -1;
+    position: static;
+    margin: 4px 16px 8px;
+  }
+  .pair {
+    grid-template-columns: 1fr;
+  }
+  .dates {
+    margin-left: 0;
+  }
+  .panel {
+    padding: 16px 14px 18px;
   }
 }
 

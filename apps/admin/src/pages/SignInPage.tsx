@@ -16,7 +16,7 @@ export function SignInPage() {
     setError("");
     try {
       setMe(await call(api.POST("/v1/admin/session", { body: { email: email(), password: password() } })));
-      navigate("/menu", { replace: true });
+      navigate("/sales", { replace: true });
     } catch (err) {
       setError((err as Error).message);
     } finally {

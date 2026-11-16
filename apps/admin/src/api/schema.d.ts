@@ -342,6 +342,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/reports/sales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the shops took between two business dates, both included, at
+         *     most 366 days apart. Sales and refunds count on the business day the
+         *     till had open, as on its own day report.
+         */
+        get: operations["getSalesReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/terminal/pair": {
         parameters: {
             query?: never;
@@ -583,6 +604,125 @@ export interface components {
             code: string;
             /** Format: date-time */
             expiresAt: string;
+        };
+        /** @description A date in the shop's own time, YYYY-MM-DD. */
+        LocalDate: string;
+        SalesReport: {
+            from: components["schemas"]["LocalDate"];
+            to: components["schemas"]["LocalDate"];
+            totals: components["schemas"]["SalesTotals"];
+            /** @description Every date from `from` to `to`, days without sales too. */
+            days: components["schemas"]["DaySales"][];
+            /** @description All 24 hours of the clock, in the shop's time, over the whole range. */
+            hours: components["schemas"]["HourSales"][];
+            /** @description What sold, most taken first. */
+            items: components["schemas"]["ItemSales"][];
+            tills: components["schemas"]["TillSales"][];
+            staff: components["schemas"]["StaffSales"][];
+            /** @description Each till's business days, latest first, with their cash counts. */
+            closes: components["schemas"]["DayClose"][];
+        };
+        SalesTotals: {
+            /** @description Completed orders; voided ones aren't sales. */
+            orders: number;
+            /** Format: int64 */
+            grossFils: number;
+            /** Format: int64 */
+            cashFils: number;
+            /** Format: int64 */
+            cardFils: number;
+            refunds: number;
+            /** Format: int64 */
+            refundsFils: number;
+            /** Format: int64 */
+            refundsCashFils: number;
+            voids: number;
+            /** Format: int64 */
+            voidsFils: number;
+            /**
+             * Format: int64
+             * @description Sales less refunds.
+             */
+            netFils: number;
+        };
+        DaySales: {
+            date: components["schemas"]["LocalDate"];
+            orders: number;
+            /** Format: int64 */
+            grossFils: number;
+            /** Format: int64 */
+            refundsFils: number;
+            /** Format: int64 */
+            netFils: number;
+        };
+        HourSales: {
+            hour: number;
+            orders: number;
+            /** Format: int64 */
+            grossFils: number;
+        };
+        ItemSales: {
+            itemId: string;
+            /** @description The name it last sold under. */
+            name: string;
+            qty: number;
+            /** Format: int64 */
+            grossFils: number;
+        };
+        TillSales: {
+            /** Format: uuid */
+            terminalId: string;
+            code: string;
+            name: string;
+            orders: number;
+            /** Format: int64 */
+            grossFils: number;
+            /** Format: int64 */
+            refundsFils: number;
+            /** Format: int64 */
+            netFils: number;
+        };
+        StaffSales: {
+            /** Format: uuid */
+            staffId: string;
+            name: string;
+            orders: number;
+            /** Format: int64 */
+            grossFils: number;
+        };
+        DayClose: {
+            /** Format: uuid */
+            id: string;
+            date: components["schemas"]["LocalDate"];
+            terminalCode: string;
+            terminalName: string;
+            /** Format: date-time */
+            openedAt: string;
+            openedByName: string;
+            /**
+             * Format: date-time
+             * @description Missing while the day is open, or its close hasn't been sent yet.
+             */
+            closedAt?: string;
+            closedByName?: string;
+            /** Format: int64 */
+            floatFils: number;
+            /** Format: int64 */
+            cashSalesFils: number;
+            /** Format: int64 */
+            cashRefundsFils: number;
+            /**
+             * Format: int64
+             * @description The float, plus cash sales, less cash refunds.
+             */
+            expectedFils: number;
+            /** Format: int64 */
+            countedFils?: number;
+            /**
+             * Format: int64
+             * @description Counted less expected; below 0 is short.
+             */
+            differenceFils?: number;
         };
         PairRequest: {
             code: string;
@@ -1424,6 +1564,33 @@ export interface operations {
                 };
                 content?: never;
             };
+            404: components["responses"]["Error"];
+        };
+    };
+    getSalesReport: {
+        parameters: {
+            query: {
+                from: components["schemas"]["LocalDate"];
+                to: components["schemas"]["LocalDate"];
+                /** @description One shop. Without it, every shop of the organization. */
+                shopId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The report. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SalesReport"];
+                };
+            };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };

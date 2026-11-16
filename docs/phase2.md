@@ -10,7 +10,7 @@ now and how to run it.
 | 3 | Connecting tills | Done |
 | 4 | Menu and staff down to the tills; till staff managed in the admin | Done |
 | 5 | Sales up from the tills: days, orders, voids, refunds, PIN changes | Done |
-| 6 | Reports in the admin | Next |
+| 6 | Sales reports in the admin | Done |
 
 ## Connect a till
 
@@ -119,6 +119,22 @@ commands above work, but the password prompt may not; then set
 
 ## The admin
 
+- **Sales**, the first page after signing in: what the shops took on a date or
+  between two. Today, Yesterday, Last 7 days, This month and Last month, or any
+  two dates up to a year apart; the range is in the address, so a bookmark or
+  a reload keeps it. On the right, the totals as a till prints its day report:
+  net sales (sales less refunds), orders and the average, cash and card,
+  refunds, and voided orders, which aren't counted. Then sales by hour (one
+  day) or by day (a range, with by hour one tap away), each column showing its
+  amount when pointed at, and the same numbers as a table; **Cash counts**, each
+  till's day with what the drawer should have held (float, plus cash sales,
+  less cash refunds), what was counted, and how much short or over (over a
+  week, the counts that came out exact fold away); what sold; and sales by till
+  and by staff.
+  - Sales and refunds count on the **business day** the till had open, as on
+    the till's own day report, so the two agree. Hours are the shop's clock.
+  - A till that hasn't been in touch for 15 minutes is named under the totals:
+    its later sales aren't in yet.
 - **Menu**: category tabs and tiles, drawn as the till draws them. Click a tile
   to edit it on the right; the tile changes as you type. Add, edit, reorder and
   delete categories and items. Choose a category's band color, which option
