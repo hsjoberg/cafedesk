@@ -1,0 +1,57 @@
+openapi: 3.1.0
+info:
+  title: Cafedesk API
+  version: 0.1.0
+  description: |
+    The contract between the Cafedesk server, the POS terminals and the admin.
+    Phase 0 has only the health check and a ping. Sync, pairing and admin
+    endpoints arrive in Phase 2; the rules they follow are in docs/sync.md
+    (to be written) and PLAN.md.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://{service}.up.railway.app
+    description: Railway
+    variables:
+      service:
+        default: cafedesk-server
+paths:
+  /healthz:
+    get:
+      operationId: healthz
+      summary: Liveness check, polled by Railway.
+      responses:
+        "200":
+          description: The server is up.
+          content:
+            text/plain:
+              schema:
+                type: string
+                const: "ok\n"
+  /v1/ping:
+    get:
+      operationId: ping
+      summary: Confirms a client can reach the API, and reports its version and clock.
+      responses:
+        "200":
+          description: The server answered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ping"
+components:
+  schemas:
+    Ping:
+      type: object
+      required: [status, version, serverTime]
+      properties:
+        status:
+          type: string
+          const: ok
+        version:
+          type: string
+          description: The server build, "dev" when built locally.
+        serverTime:
+          type: string
+          format: date-time
+          description: The server's clock in UTC, to spot a POS whose clock is wrong.

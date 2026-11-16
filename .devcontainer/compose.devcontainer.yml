@@ -1,0 +1,16 @@
+services:
+  dev:
+    image: mcr.microsoft.com/devcontainers/go:1
+    command: sleep infinity
+    volumes:
+      - ..:/workspaces/cafedesk:cached
+    environment:
+      # Downloads the Go version go.mod asks for if the image's is older.
+      GOTOOLCHAIN: auto
+      # The workspace includes the POS, which needs Windows; the container
+      # builds the server and pkg modules on their own.
+      GOWORK: "off"
+      DATABASE_URL: postgres://cafedesk:cafedesk@postgres:5432/cafedesk?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy

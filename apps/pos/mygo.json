@@ -1,0 +1,7 @@
+{
+  "name": "Cafedesk POS",
+  "slug": "cafedesk-pos",
+  "identifier": "com.cafedesk.pos",
+  "version": "0.2.0",
+  "out": "build"
+}

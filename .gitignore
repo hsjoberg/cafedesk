@@ -1,0 +1,24 @@
+# Go
+*.exe
+*.test
+*.out
+coverage.*
+
+# MyGo
+apps/pos/.mygo/
+apps/pos/build/
+apps/pos/dist/
+
+# Snapshots rendered by tests for design review
+apps/pos/testdata/snapshots/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local environment
+.env
+.env.*
+!.env.example

@@ -1,0 +1,20 @@
+{
+  // Dev container for the server, the admin and Postgres.
+  // The POS app is a Windows GUI app: build and run it on the host, not here.
+  "name": "cafedesk",
+  "dockerComposeFile": ["../docker-compose.yml", "compose.devcontainer.yml"],
+  "service": "dev",
+  "runServices": ["dev", "postgres"],
+  "workspaceFolder": "/workspaces/cafedesk",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [8080, 5432],
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go"]
+    }
+  },
+  "postCreateCommand": "cd apps/server && go version && go test ./..."
+}

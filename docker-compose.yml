@@ -1,0 +1,35 @@
+# Local services for development: Postgres, and the server built from source.
+#   docker compose up -d postgres        Postgres alone
+#   docker compose up --build            Postgres and the server on :8080
+name: cafedesk
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: cafedesk
+      POSTGRES_PASSWORD: cafedesk
+      POSTGRES_DB: cafedesk
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cafedesk -d cafedesk"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build: ./apps/server
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://cafedesk:cafedesk@postgres:5432/cafedesk?sslmode=disable
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
