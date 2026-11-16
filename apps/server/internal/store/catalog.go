@@ -64,7 +64,8 @@ func (s *Store) Catalog(ctx context.Context, orgID uuid.UUID) (api.Catalog, erro
 		return c, err
 	}
 
-	rows, err = s.pool.Query(ctx, `SELECT i.id, i.category_id, i.name, i.name_ar, i.price_fils, i.position, i.kitchen
+	rows, err = s.pool.Query(ctx, `SELECT i.id, i.category_id, i.name, i.name_ar, i.price_fils, i.position, i.kitchen,
+		`+currentCost(itemCosts, "i")+`
 		FROM items i JOIN categories c ON c.id = i.category_id
 		WHERE i.org_id = $1 AND NOT i.archived ORDER BY c.position, i.position`, orgID)
 	if err != nil {
@@ -72,7 +73,7 @@ func (s *Store) Catalog(ctx context.Context, orgID uuid.UUID) (api.Catalog, erro
 	}
 	c.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (api.Item, error) {
 		var x api.Item
-		err := r.Scan(&x.Id, &x.CategoryId, &x.Name, &x.NameAr, &x.PriceFils, &x.Position, &x.Kitchen)
+		err := r.Scan(&x.Id, &x.CategoryId, &x.Name, &x.NameAr, &x.PriceFils, &x.Position, &x.Kitchen, &x.CostFils)
 		x.ModifierGroupIds = groupsOf[x.Id]
 		if x.ModifierGroupIds == nil {
 			x.ModifierGroupIds = []uuid.UUID{}
@@ -84,15 +85,16 @@ func (s *Store) Catalog(ctx context.Context, orgID uuid.UUID) (api.Catalog, erro
 	}
 
 	mods := map[uuid.UUID][]api.Modifier{}
-	rows, err = s.pool.Query(ctx, `SELECT id, group_id, name, name_ar, price_delta_fils, is_default, position
-		FROM modifiers WHERE org_id = $1 AND NOT archived ORDER BY group_id, position`, orgID)
+	rows, err = s.pool.Query(ctx, `SELECT m.id, m.group_id, m.name, m.name_ar, m.price_delta_fils, m.is_default, m.position,
+		`+currentCost(modifierCosts, "m")+`
+		FROM modifiers m WHERE m.org_id = $1 AND NOT m.archived ORDER BY m.group_id, m.position`, orgID)
 	if err != nil {
 		return c, err
 	}
 	for rows.Next() {
 		var m api.Modifier
 		var group uuid.UUID
-		if err := rows.Scan(&m.Id, &group, &m.Name, &m.NameAr, &m.PriceDeltaFils, &m.IsDefault, &m.Position); err != nil {
+		if err := rows.Scan(&m.Id, &group, &m.Name, &m.NameAr, &m.PriceDeltaFils, &m.IsDefault, &m.Position, &m.CostFils); err != nil {
 			return c, err
 		}
 		mods[group] = append(mods[group], m)
@@ -309,7 +311,7 @@ func setItemGroups(ctx context.Context, tx pgx.Tx, itemID uuid.UUID, groups []uu
 // CreateItem adds an item at the end of its category.
 func (s *Store) CreateItem(ctx context.Context, orgID uuid.UUID, in api.ItemInput) (api.Item, error) {
 	it := api.Item{Id: newID(), CategoryId: in.CategoryId, Name: in.Name, NameAr: str(in.NameAr),
-		PriceFils: in.PriceFils, Kitchen: in.Kitchen, ModifierGroupIds: dedupe(in.ModifierGroupIds)}
+		PriceFils: in.PriceFils, Kitchen: in.Kitchen, ModifierGroupIds: dedupe(in.ModifierGroupIds), CostFils: in.CostFils}
 	if it.ModifierGroupIds == nil {
 		it.ModifierGroupIds = []uuid.UUID{}
 	}
@@ -333,6 +335,9 @@ func (s *Store) CreateItem(ctx context.Context, orgID uuid.UUID, in api.ItemInpu
 			it.Id, orgID, it.CategoryId, it.Name, it.NameAr, it.PriceFils, it.Position, it.Kitchen, v); err != nil {
 			return err
 		}
+		if err := setCost(ctx, tx, itemCosts, orgID, it.Id, it.CostFils); err != nil {
+			return err
+		}
 		return setItemGroups(ctx, tx, it.Id, it.ModifierGroupIds)
 	})
 	return it, err
@@ -342,7 +347,7 @@ func (s *Store) CreateItem(ctx context.Context, orgID uuid.UUID, in api.ItemInpu
 // end there.
 func (s *Store) UpdateItem(ctx context.Context, orgID, id uuid.UUID, in api.ItemInput) (api.Item, error) {
 	it := api.Item{Id: id, CategoryId: in.CategoryId, Name: in.Name, NameAr: str(in.NameAr),
-		PriceFils: in.PriceFils, Kitchen: in.Kitchen, ModifierGroupIds: dedupe(in.ModifierGroupIds)}
+		PriceFils: in.PriceFils, Kitchen: in.Kitchen, ModifierGroupIds: dedupe(in.ModifierGroupIds), CostFils: in.CostFils}
 	if it.ModifierGroupIds == nil {
 		it.ModifierGroupIds = []uuid.UUID{}
 	}
@@ -378,6 +383,9 @@ func (s *Store) UpdateItem(ctx context.Context, orgID, id uuid.UUID, in api.Item
 			return err
 		}
 		if err := setItemGroups(ctx, tx, id, it.ModifierGroupIds); err != nil {
+			return err
+		}
+		if err := setCost(ctx, tx, itemCosts, orgID, id, it.CostFils); err != nil {
 			return err
 		}
 		if oldCategory != in.CategoryId {
@@ -493,7 +501,7 @@ func saveModifiers(ctx context.Context, tx pgx.Tx, orgID, groupID uuid.UUID, in 
 	kept := map[uuid.UUID]bool{}
 	for i, m := range in {
 		mod := api.Modifier{Name: m.Name, NameAr: str(m.NameAr), PriceDeltaFils: m.PriceDeltaFils,
-			IsDefault: m.IsDefault, Position: i}
+			IsDefault: m.IsDefault, Position: i, CostFils: m.CostFils}
 		if m.Id != nil && existing[*m.Id] && !kept[*m.Id] {
 			mod.Id = *m.Id
 			kept[mod.Id] = true
@@ -509,6 +517,9 @@ func saveModifiers(ctx context.Context, tx pgx.Tx, orgID, groupID uuid.UUID, in 
 				mod.Id, orgID, groupID, mod.Name, mod.NameAr, mod.PriceDeltaFils, mod.IsDefault, mod.Position, v); err != nil {
 				return nil, err
 			}
+		}
+		if err := setCost(ctx, tx, modifierCosts, orgID, mod.Id, mod.CostFils); err != nil {
+			return nil, err
 		}
 		out = append(out, mod)
 	}

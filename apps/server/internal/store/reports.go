@@ -108,22 +108,34 @@ func (s *Store) SalesReport(ctx context.Context, orgID uuid.UUID, from, to time.
 			return err
 		}
 
-		rows, err = tx.Query(ctx, `SELECT l.item_id, (array_agg(l.name ORDER BY x.created_at DESC))[1],
-				SUM(l.qty)::int, SUM(l.line_total_fils)::bigint
-			FROM order_lines l JOIN orders x ON x.id = l.order_id JOIN business_days d ON d.id = x.business_day_id
-			WHERE `+inDays+` AND x.status = 'completed'
-			GROUP BY l.item_id ORDER BY 4 DESC, 3 DESC, 2`, args...)
+		rows, err = tx.Query(ctx, costedLines+` SELECT item_id, (array_agg(name ORDER BY created_at DESC))[1],
+				SUM(qty)::int, SUM(line_total_fils)::bigint,
+				CASE WHEN bool_and(cost IS NOT NULL) THEN SUM(cost)::bigint END
+			FROM costed GROUP BY item_id ORDER BY 4 DESC, 3 DESC, 2`, args...)
 		if err != nil {
 			return err
 		}
 		rep.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (api.ItemSales, error) {
 			var it api.ItemSales
-			err := r.Scan(&it.ItemId, &it.Name, &it.Qty, &it.GrossFils)
+			err := r.Scan(&it.ItemId, &it.Name, &it.Qty, &it.GrossFils, &it.CostFils)
 			return it, err
 		})
 		if err != nil {
 			return err
 		}
+
+		// Profit: the sales with a cost, less their refunds, less the cost.
+		var costedSales, costedRefunds int64
+		if err := tx.QueryRow(ctx, costedLines+` SELECT
+				COALESCE(SUM(cost), 0)::bigint,
+				COALESCE(SUM(line_total_fils) FILTER (WHERE cost IS NOT NULL), 0)::bigint,
+				COALESCE(SUM(line_total_fils) FILTER (WHERE cost IS NULL), 0)::bigint,
+				COALESCE((SELECT SUM(rl.amount_fils) FROM refund_lines rl JOIN costed c ON c.id = rl.order_line_id
+					WHERE c.cost IS NOT NULL), 0)::bigint
+			FROM costed`, args...).Scan(&t.CostFils, &costedSales, &t.UncostedFils, &costedRefunds); err != nil {
+			return err
+		}
+		t.ProfitFils = costedSales - costedRefunds - t.CostFils
 
 		rows, err = tx.Query(ctx, `SELECT t.id, t.code, t.name, COALESCE(o.orders, 0), COALESCE(o.gross, 0), COALESCE(r.total, 0)
 			FROM terminals t

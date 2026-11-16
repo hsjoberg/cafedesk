@@ -126,6 +126,9 @@ func validItem(w http.ResponseWriter, in *api.ItemInput) bool {
 	case in.PriceFils < 0 || in.PriceFils > maxPrice:
 		invalid(w, "priceFils", "Enter a price from 0.00 to 10,000.00.")
 		return false
+	case in.CostFils != nil && (*in.CostFils < 0 || *in.CostFils > maxPrice):
+		invalid(w, "costFils", "Enter a cost from 0.00 to 10,000.00, or leave it empty.")
+		return false
 	case len(in.ModifierGroupIds) > maxGroups:
 		invalid(w, "modifierGroupIds", fmt.Sprintf("An item can have up to %d option groups.", maxGroups))
 		return false
@@ -203,6 +206,10 @@ func validGroup(w http.ResponseWriter, in *api.ModifierGroupInput) bool {
 		}
 		if m.PriceDeltaFils < -maxDelta || m.PriceDeltaFils > maxDelta {
 			invalid(w, field+".priceDeltaFils", "Keep a price change within 1,000.00 either way.")
+			return false
+		}
+		if m.CostFils != nil && (*m.CostFils < 0 || *m.CostFils > maxDelta) {
+			invalid(w, field+".costFils", "Enter a cost from 0.00 to 1,000.00, or leave it empty.")
 			return false
 		}
 		if m.IsDefault {

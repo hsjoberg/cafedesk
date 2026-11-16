@@ -5,10 +5,10 @@ import { formatFils, parseAmount } from "../money";
 import { catalog, catalogError, reloadCatalog } from "../state";
 import { DeleteButton, EditorHead, Field, fieldError, FormError, toSaveError, type SaveError } from "../ui";
 
-type ModDraft = { id?: string; name: string; nameAr: string; delta: string; isDefault: boolean };
+type ModDraft = { id?: string; name: string; nameAr: string; delta: string; cost: string; isDefault: boolean };
 type GroupDraft = { name: string; nameAr: string; multiple: boolean; modifiers: ModDraft[] };
 
-const blankMod = (): ModDraft => ({ name: "", nameAr: "", delta: "0.00", isDefault: false });
+const blankMod = (): ModDraft => ({ name: "", nameAr: "", delta: "0.00", cost: "", isDefault: false });
 
 /** Option groups: sugar levels, spice, extras. Items choose which they have. */
 export function OptionsPage() {
@@ -30,7 +30,8 @@ export function OptionsPage() {
       group
         ? { name: group.name, nameAr: group.nameAr, multiple: group.multiple,
             modifiers: group.modifiers.map((m) => ({ id: m.id, name: m.name, nameAr: m.nameAr ?? "",
-              delta: formatFils(m.priceDeltaFils), isDefault: m.isDefault })) }
+              delta: formatFils(m.priceDeltaFils), cost: m.costFils == null ? "" : formatFils(m.costFils),
+              isDefault: m.isDefault })) }
         : { name: "", nameAr: "", multiple: false, modifiers: [{ ...blankMod(), isDefault: true }, blankMod()] },
     );
     setEditing(group?.id ?? null);
@@ -52,7 +53,10 @@ export function OptionsPage() {
       const modifiers = g.modifiers.map((m, i) => {
         const delta = parseAmount(m.delta || "0", true);
         if (delta === null) throw { field: `modifiers.${i}.priceDeltaFils`, message: "Enter a price change like 1.00 or -0.50." };
-        return { id: m.id, name: m.name, nameAr: m.nameAr, priceDeltaFils: delta, isDefault: m.isDefault };
+        const costFils = m.cost.trim() === "" ? null : parseAmount(m.cost);
+        if (costFils === null && m.cost.trim() !== "")
+          throw { field: `modifiers.${i}.costFils`, message: "Enter a cost like 0.30, or leave it empty." };
+        return { id: m.id, name: m.name, nameAr: m.nameAr, priceDeltaFils: delta, costFils, isDefault: m.isDefault };
       });
       const body = { name: g.name, nameAr: g.nameAr, multiple: g.multiple, modifiers };
       const id = editing();
@@ -158,16 +162,22 @@ export function OptionsPage() {
 
           <div class="field">
             <span>Options</span>
+            <span class="meta">
+              Cost is what an option adds to the item's cost, as an extra parotta does. Leave it empty when it adds nothing.
+            </span>
             <Index each={g.modifiers}>
               {(m, i) => (
                 <div class="mod">
                   <Field label="Name" value={m().name} onInput={(v) => setG("modifiers", i, "name", v)}
                     error={fieldError(error(), `modifiers.${i}.name`)} />
+                  <Field label="Arabic name" value={m().nameAr} rtl onInput={(v) => setG("modifiers", i, "nameAr", v)} />
                   <div class="mod-row">
-                    <Field label="Arabic name" value={m().nameAr} rtl onInput={(v) => setG("modifiers", i, "nameAr", v)} />
                     <Field label="Price change" value={m().delta} inputMode="decimal"
                       onInput={(v) => setG("modifiers", i, "delta", v)}
                       error={fieldError(error(), `modifiers.${i}.priceDeltaFils`)} />
+                    <Field label="Cost (optional)" value={m().cost} inputMode="decimal"
+                      onInput={(v) => setG("modifiers", i, "cost", v)}
+                      error={fieldError(error(), `modifiers.${i}.costFils`)} />
                   </div>
                   <div class="row">
                     <label class="check">

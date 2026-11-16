@@ -11,6 +11,8 @@ Last updated: 2026-11-16.
 - A **web admin** for menu, prices, costs and reports.
 - Windows 10 first. macOS and Linux kept possible, not a priority.
 - Deliberately simple. No off-the-shelf POS (they are too complex).
+- **Control and overview** of the business: where the money comes from and
+  where it goes, so problems (cash short, waste, costs creeping up) show.
 
 ## 2. Decisions
 
@@ -225,11 +227,52 @@ that exists:
     docs/phase2.md). The alerts moved to Phase 5.
 
 ### Phase 3: Costs and margins (about 2 weeks)
+**Status (2026-11-16):** step 1 is done: a cost per item and per option, kept
+as a history so a change never rewrites past profit, and profit on the Sales
+page. Step 2 is next. See [docs/phase3.md](docs/phase3.md).
+
 1. Simple: one manual cost per item, giving margin per item.
-2. Proper: ingredients with purchase records (supplier, quantity, price), recipes (a cup of karak = milk + tea + sugar + cardamom + cup), cost per unit (rolling average or latest), cost per item from the recipe, snapshotted on each sale.
+2. Proper, in this order:
+   1. **Purchases**: the weekly wholesale invoice and one-off shop purchases,
+      entered the same way in the web admin (supplier optional, date, lines
+      of product, quantity, price). Spend per week and month, and food cost
+      as a share of sales, from week one, without recipes.
+      **Invoice photos** (deferred, wanted later): a purchase keeps a photo of
+      its invoice; an AI model (Claude, reading the image) proposes the
+      lines, matched to known products, for a person to check and save.
+      Typing them in always works too, and is the only way with no internet.
+   2. **Products and ingredients**, two levels:
+      - A *product* is what is bought, as the invoice names it: "Rainbow
+        evaporated milk, 48 × 170 g", its supplier, its pack size. Brands and
+        sizes come and go.
+      - An *ingredient* is what recipes use: "Evaporated milk", in g, ml or
+        pieces. Each product belongs to one ingredient; products that can
+        stand in for each other at the same amount share one.
+      - An ingredient's price per unit comes from recent purchases of all its
+        products, each turned into the unit (an average over the last few).
+        Changing brand changes no recipe.
+   3. **Recipes**: an item's cost from what goes into it; options adjust the
+      recipe (extra sugar +5 g). A cost from a recipe goes into the same cost
+      history as a hand-entered one, so past profit never changes.
+      **Batch cooking**: the chef makes a big cook from which several meals
+      are served. A *batch* is a recipe with a yield (it makes so many
+      portions, or kilos); meals use portions of it. Its cost per portion is
+      the batch's cost over its yield. The big cook is about the same each
+      time and lasts a day or two, so one standard batch recipe should do;
+      portions per pot is an estimate to firm up in practice. Portions left
+      to spoil show as waste in the gap, not in each meal's cost. Later,
+      maybe: noting each pot made, to make the gap sharper.
+   4. **The gap**: what was bought against what sales should have used, by
+      the recipes. Sharper once there are stock counts (Phase 5).
 
 ### Phase 4: Statistics (about 1–2 weeks)
 Sales by day, hour, item and category; margin per item and per day; best and worst sellers; low-margin warnings; optional daily or weekly summary by WhatsApp or email.
+
+### Later, but needed: shop expenses
+Rent, salaries, gas, electricity, licences and the like don't belong to an
+item, so the profit of Phase 3 is after ingredients and packaging only. A page
+for shop expenses (monthly or one-off), and a monthly view of profit after
+everything: sales, less ingredients, less expenses. Deferred, not dropped.
 
 ### Phase 5: Hardening and later
 - POS auto-update (MyGo supports delta updates).

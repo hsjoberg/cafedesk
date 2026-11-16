@@ -19,6 +19,9 @@ func TestDemoSales(t *testing.T) {
 	if err := st.SeedDemoMenu(ctx, org); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.SeedDemoCosts(ctx, org); err != nil {
+		t.Fatal(err)
+	}
 	shops, _ := st.Shops(ctx, org)
 	shop := shops[0].ID
 	var people []store.DemoStaff
@@ -46,6 +49,10 @@ func TestDemoSales(t *testing.T) {
 	if rep.Totals.Orders < 500 || rep.Totals.NetFils <= 0 || rep.Totals.CashFils == 0 || rep.Totals.CardFils == 0 ||
 		len(rep.Tills) != 2 || len(rep.Staff) != 1 || len(rep.Items) == 0 {
 		t.Errorf("totals %+v, %d tills, %d staff", rep.Totals, len(rep.Tills), len(rep.Staff))
+	}
+	if rep.Totals.CostFils <= 0 || rep.Totals.ProfitFils <= 0 || rep.Totals.UncostedFils <= 0 ||
+		rep.Totals.ProfitFils >= rep.Totals.NetFils {
+		t.Errorf("demo profit: %+v", rep.Totals)
 	}
 	if len(rep.Closes) != 20 {
 		t.Fatalf("%d days, want 20", len(rep.Closes))

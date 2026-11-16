@@ -712,7 +712,7 @@ fieldset.bare {
   border-bottom: 0;
 }
 .items .bar-cell {
-  width: 32%;
+  width: 24%;
   vertical-align: middle;
 }
 /* A ranked bar: square where it starts, rounded where the value ends. */
@@ -892,6 +892,17 @@ fieldset.bare {
 .slip-lines dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+.slip-lines .profit {
+  font-weight: 500;
+}
+.slip .slip-note {
+  margin-top: 8px;
+}
+.slip a,
+.panel .meta a {
+  color: inherit;
+  font-weight: 500;
 }
 .behind {
   margin: 0;

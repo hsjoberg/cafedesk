@@ -1,6 +1,8 @@
 package server_test
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,7 +76,7 @@ func TestSalesReport(t *testing.T) {
 		t.Fatalf("report: %d", code)
 	}
 	want := api.SalesTotals{Orders: 4, GrossFils: 750, CashFils: 400, CardFils: 350, Refunds: 1, RefundsFils: 100,
-		RefundsCashFils: 100, Voids: 1, VoidsFils: 100, NetFils: 650}
+		RefundsCashFils: 100, Voids: 1, VoidsFils: 100, NetFils: 650, UncostedFils: 750}
 	if rep.Totals != want {
 		t.Errorf("totals %+v, want %+v", rep.Totals, want)
 	}
@@ -151,5 +153,131 @@ func TestSalesReport(t *testing.T) {
 	}
 	if code := other.do("GET", "/v1/admin/reports/sales?from=2026-11-14&to=2026-11-15&shopId="+shop.Id.String(), nil, nil); code != 404 {
 		t.Errorf("another organization's shop: %d", code)
+	}
+}
+
+// Profit counts each sale at the cost its item had when it was sold: an
+// item's first cost reaches back to its earlier sales, a change only
+// forward. Options add their cost; items without one stay out of it.
+func TestProfit(t *testing.T) {
+	c, _, _ := newServer(t)
+	_, token, manager, _ := tillSetup(t, c)
+	till := newClient(t, c.ts)
+	var cat api.Catalog
+	c.do("GET", "/v1/admin/catalog", nil, &cat)
+	karak := cat.Items[0]
+
+	var extras api.ModifierGroup
+	if code := c.do("POST", "/v1/admin/modifier-groups", api.ModifierGroupInput{Name: "Extras", Multiple: true,
+		Modifiers: []api.ModifierInput{{Name: "Extra milk", PriceDeltaFils: 50, CostFils: ptr(int64(20))}}}, &extras); code != 201 ||
+		extras.Modifiers[0].CostFils == nil || *extras.Modifiers[0].CostFils != 20 {
+		t.Fatalf("an option with a cost: %d %+v", code, extras)
+	}
+	saveKarak := func(cost *int64) int {
+		var e api.Error
+		return c.do("PUT", "/v1/admin/items/"+karak.Id.String(), api.ItemInput{CategoryId: karak.CategoryId, Name: karak.Name,
+			PriceFils: karak.PriceFils, ModifierGroupIds: []uuid.UUID{extras.Id}, CostFils: cost}, &e)
+	}
+	if code := saveKarak(ptr(int64(-1))); code != 400 {
+		t.Errorf("a cost below nothing: %d", code)
+	}
+
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	date := now.Format("2006-01-02")
+	day := uuid.New()
+	line := func(item string, qty int, unit int64, mods ...api.OrderLineModifierEvent) api.OrderLineEvent {
+		if mods == nil {
+			mods = []api.OrderLineModifierEvent{}
+		}
+		var delta int64
+		for _, m := range mods {
+			delta += m.PriceDeltaFils
+		}
+		return api.OrderLineEvent{Id: uuid.New(), ItemId: item, Name: item, Qty: qty, UnitPriceFils: unit + delta,
+			LineTotalFils: int64(qty) * (unit + delta), Modifiers: mods}
+	}
+	order := func(n int, at time.Time, lines ...api.OrderLineEvent) api.OrderEvent {
+		var total int64
+		for _, l := range lines {
+			total += l.LineTotalFils
+		}
+		return api.OrderEvent{Id: uuid.New(), BusinessDayId: day, Number: n, Code: "T1-00" + itoa(int64(n)), CreatedAt: at,
+			StaffId: manager.Id, StaffName: "Ravi", TotalFils: total, PaymentMethod: api.Cash, TenderedFils: total, Lines: lines}
+	}
+	milk := api.OrderLineModifierEvent{GroupId: extras.Id.String(), GroupName: "Extras",
+		ModifierId: extras.Modifiers[0].Id.String(), Name: "Extra milk", PriceDeltaFils: 50}
+	// Sold before karak had a cost: 2 with extra milk, and a parotta from the demo menu.
+	early := order(1, now.Add(-2*time.Hour), line(karak.Id.String(), 2, 100, milk), line("parotta", 1, 100))
+	send := func(seq int64, ev api.Event) {
+		var res api.EventResult
+		ev.Seq = seq
+		till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{ev}}, &res, bearer(token)...)
+		if len(res.Accepted) != 1 {
+			t.Fatalf("event %d: %+v", seq, res)
+		}
+	}
+	send(1, api.Event{Type: api.BusinessDay, BusinessDay: &api.BusinessDayEvent{Id: day, Date: date,
+		OpenedAt: now.Add(-3 * time.Hour), OpenedBy: manager.Id, OpenedByName: "Ravi", OpeningFloatFils: 0}})
+	send(2, api.Event{Type: api.Order, Order: &early})
+
+	// Its first cost reaches back; a change, later, doesn't.
+	if code := saveKarak(ptr(int64(40))); code != 200 {
+		t.Fatalf("a first cost: %d", code)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if code := saveKarak(ptr(int64(60))); code != 200 {
+		t.Fatalf("a new cost: %d", code)
+	}
+	time.Sleep(20 * time.Millisecond)
+	late := order(2, time.Now().UTC(), line(karak.Id.String(), 1, 100))
+	send(3, api.Event{Type: api.Order, Order: &late})
+	send(4, api.Event{Type: api.Refund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: early.Id, BusinessDayId: day,
+		CreatedAt: now, StaffId: manager.Id, StaffName: "Ravi", ApprovedBy: manager.Id, ApprovedByName: "Ravi",
+		Reason: "Spilt", Method: api.Cash, TotalFils: 150,
+		Lines: []api.RefundLineEvent{{OrderLineId: early.Lines[0].Id, Qty: 1, AmountFils: 150}}}})
+
+	var rep api.SalesReport
+	c.do("GET", "/v1/admin/reports/sales?from="+date+"&to="+date, nil, &rep)
+	// Cost: 2 × (40 + 20) early, 1 × 60 late. Sales with a cost: 300 + 100,
+	// less 150 refunded. The parotta, 100, has no cost.
+	if rep.Totals.CostFils != 180 || rep.Totals.ProfitFils != 400-150-180 || rep.Totals.UncostedFils != 100 {
+		t.Errorf("totals %+v", rep.Totals)
+	}
+	for _, it := range rep.Items {
+		switch it.ItemId {
+		case karak.Id.String():
+			if it.CostFils == nil || *it.CostFils != 180 {
+				t.Errorf("karak's cost: %v", it.CostFils)
+			}
+		case "parotta":
+			if it.CostFils != nil {
+				t.Errorf("the parotta has a cost: %d", *it.CostFils)
+			}
+		}
+	}
+
+	// The menu shows today's costs, and clearing one leaves later sales without.
+	c.do("GET", "/v1/admin/catalog", nil, &cat)
+	if cat.Items[0].CostFils == nil || *cat.Items[0].CostFils != 60 || cat.ModifierGroups[0].Modifiers[0].CostFils == nil {
+		t.Errorf("the menu's costs: %+v %+v", cat.Items[0], cat.ModifierGroups[0].Modifiers[0])
+	}
+	time.Sleep(20 * time.Millisecond)
+	saveKarak(nil)
+	time.Sleep(20 * time.Millisecond)
+	c.do("GET", "/v1/admin/catalog", nil, &cat)
+	if cat.Items[0].CostFils != nil {
+		t.Errorf("a cleared cost: %d", *cat.Items[0].CostFils)
+	}
+	cleared := order(3, time.Now().UTC(), line(karak.Id.String(), 1, 100))
+	send(5, api.Event{Type: api.Order, Order: &cleared})
+	c.do("GET", "/v1/admin/reports/sales?from="+date+"&to="+date, nil, &rep)
+	if rep.Totals.CostFils != 180 || rep.Totals.UncostedFils != 200 {
+		t.Errorf("after clearing: %+v", rep.Totals)
+	}
+	// The tills never hear of costs.
+	var ch api.Changes
+	till.do("GET", "/v1/terminal/changes?since=0", nil, &ch, bearer(token)...)
+	if b, _ := json.Marshal(ch); strings.Contains(string(b), "cost") {
+		t.Error("costs reach the tills")
 	}
 }

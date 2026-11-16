@@ -1,4 +1,4 @@
-import { useSearchParams } from "@solidjs/router";
+import { A, useSearchParams } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js";
 import { api, call, type DayClose, type SalesReport, type Terminal } from "../api/client";
 import { ColumnChart, type Column } from "../components/ColumnChart";
@@ -8,6 +8,8 @@ import { me } from "../state";
 
 const hourName = (h: number) =>
   new Date(Date.UTC(2000, 0, 1, h)).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+/** Profit as a share of sales, as "58%". */
+const margin = (profit: number, sales: number) => (sales > 0 ? `${Math.round((profit / sales) * 100)}%` : "");
 const orders = (n: number) => (n === 1 ? "1 order" : `${n} orders`);
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -272,38 +274,49 @@ export function SalesPage() {
               <section class="panel">
                 <h2>What sold</h2>
                 <Show when={r().items.length} fallback={<p class="empty">Nothing sold on these dates.</p>}>
-                  <table class="table items">
-                    <thead>
-                      <tr>
-                        <th scope="col">Item</th>
-                        <th scope="col" class="bar-cell">
-                          <span class="visually-hidden">Share</span>
-                        </th>
-                        <th scope="col" class="n">Sold</th>
-                        <th scope="col" class="n">Sales</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <For each={items()}>
-                        {(it) => (
-                          <tr>
-                            <th scope="row">{it.name}</th>
-                            <td class="bar-cell" aria-hidden="true">
-                              <span class="meter" style={{ width: `${(it.grossFils / topItem()) * 100}%` }} />
-                            </td>
-                            <td class="n">{it.qty}</td>
-                            <td class="n">{formatAmount(it.grossFils)}</td>
-                          </tr>
-                        )}
-                      </For>
-                    </tbody>
-                  </table>
+                  <div class="table-wrap">
+                    <table class="table items">
+                      <thead>
+                        <tr>
+                          <th scope="col">Item</th>
+                          <th scope="col" class="bar-cell">
+                            <span class="visually-hidden">Share</span>
+                          </th>
+                          <th scope="col" class="n">Sold</th>
+                          <th scope="col" class="n">Sales</th>
+                          <th scope="col" class="n">Profit</th>
+                          <th scope="col" class="n">Margin</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={items()}>
+                          {(it) => (
+                            <tr>
+                              <th scope="row">{it.name}</th>
+                              <td class="bar-cell" aria-hidden="true">
+                                <span class="meter" style={{ width: `${(it.grossFils / topItem()) * 100}%` }} />
+                              </td>
+                              <td class="n">{it.qty}</td>
+                              <td class="n">{formatAmount(it.grossFils)}</td>
+                              <Show when={it.costFils != null} fallback={<td class="n muted" colspan="2">No cost</td>}>
+                                <td class="n">{formatAmount(it.grossFils - it.costFils!)}</td>
+                                <td class="n">{margin(it.grossFils - it.costFils!, it.grossFils)}</td>
+                              </Show>
+                            </tr>
+                          )}
+                        </For>
+                      </tbody>
+                    </table>
+                  </div>
                   <Show when={r().items.length > 10}>
                     <button type="button" class="btn btn-plain btn-small" onClick={() => setAllItems(!allItems())}>
                       {allItems() ? "Show the top 10" : `Show all ${r().items.length}`}
                     </button>
                   </Show>
-                  <p class="meta">Before refunds. Voided orders aren't counted.</p>
+                  <p class="meta">
+                    Before refunds. Voided orders aren't counted. Profit is sales less what they cost when sold: set an
+                    item's cost on <A href="/menu">Menu</A>.
+                  </p>
                 </Show>
               </section>
 
@@ -404,6 +417,33 @@ export function SalesPage() {
                   <dd>{r().totals.refundsFils ? "-" + formatAmount(r().totals.refundsFils) : formatAmount(0)}</dd>
                 </div>
               </dl>
+              <Show
+                when={r().totals.costFils > 0}
+                fallback={
+                  <Show when={r().totals.orders > 0}>
+                    <p class="meta slip-note">
+                      Give items their cost on <A href="/menu">Menu</A> to see the profit here.
+                    </p>
+                  </Show>
+                }
+              >
+                <dl class="slip-lines">
+                  <div>
+                    <dt>What it cost</dt>
+                    <dd>-{formatAmount(r().totals.costFils)}</dd>
+                  </div>
+                  <div class="profit">
+                    <dt>Profit</dt>
+                    <dd>{formatAmount(r().totals.profitFils)}</dd>
+                  </div>
+                </dl>
+                <p class="meta slip-note">
+                  A {margin(r().totals.profitFils, r().totals.profitFils + r().totals.costFils)} margin, after refunds.
+                  <Show when={r().totals.uncostedFils > 0}>
+                    {" "}It leaves out {formatAmount(r().totals.uncostedFils)} of sales of items without a cost.
+                  </Show>
+                </p>
+              </Show>
               <dl class="slip-lines">
                 <div>
                   <dt>Paid in cash</dt>

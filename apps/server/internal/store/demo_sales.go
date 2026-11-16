@@ -189,3 +189,39 @@ func (s *Store) SeedDemoSales(ctx context.Context, orgID, shopID uuid.UUID, mana
 }
 
 func ptrTo[T any](v T) *T { return &v }
+
+// SeedDemoCosts gives the demo menu made-up costs, from the start: tea and
+// drinks at about a quarter of their price, meals at about 40%, extras at
+// half their price change. Every fifth item is left without one, to show
+// how the admin asks for them.
+func (s *Store) SeedDemoCosts(ctx context.Context, orgID uuid.UUID) error {
+	cat, err := s.Catalog(ctx, orgID)
+	if err != nil {
+		return err
+	}
+	return s.inTx(ctx, func(tx pgx.Tx) error {
+		round := func(f float64) int64 { return int64(f/5+0.5) * 5 }
+		for i, it := range cat.Items {
+			if i%5 == 4 {
+				continue
+			}
+			share := 0.4
+			if it.PriceFils <= 300 {
+				share = 0.25
+			}
+			if err := setCost(ctx, tx, itemCosts, orgID, it.Id, ptrTo(round(float64(it.PriceFils)*share))); err != nil {
+				return err
+			}
+		}
+		for _, g := range cat.ModifierGroups {
+			for _, m := range g.Modifiers {
+				if m.PriceDeltaFils > 0 {
+					if err := setCost(ctx, tx, modifierCosts, orgID, m.Id, ptrTo(round(float64(m.PriceDeltaFils)*0.5))); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	})
+}

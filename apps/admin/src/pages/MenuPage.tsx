@@ -24,6 +24,10 @@ type ItemDraft = {
   name: string;
   nameAr: string;
   price: string;
+  /** What one costs the shop, in dirhams; "" for not known. */
+  cost: string;
+  /** The cost it had when opened, to say what a change does. */
+  savedCost: number | null;
   categoryId: string;
   kitchen: boolean;
   groupIds: string[];
@@ -50,7 +54,8 @@ export function MenuPage() {
   const [busy, setBusy] = createSignal(false);
 
   function emptyItem(c: Category | undefined): ItemDraft {
-    return { name: "", nameAr: "", price: "", categoryId: c?.id ?? "", kitchen: c?.kitchen ?? false, groupIds: [] };
+    return { name: "", nameAr: "", price: "", cost: "", savedCost: null, categoryId: c?.id ?? "",
+      kitchen: c?.kitchen ?? false, groupIds: [] };
   }
 
   const reset = () => {
@@ -61,8 +66,9 @@ export function MenuPage() {
     reset();
     setItem(
       it
-        ? { name: it.name, nameAr: it.nameAr ?? "", price: formatFils(it.priceFils), categoryId: it.categoryId,
-            kitchen: it.kitchen, groupIds: [...it.modifierGroupIds] }
+        ? { name: it.name, nameAr: it.nameAr ?? "", price: formatFils(it.priceFils),
+            cost: it.costFils == null ? "" : formatFils(it.costFils), savedCost: it.costFils ?? null,
+            categoryId: it.categoryId, kitchen: it.kitchen, groupIds: [...it.modifierGroupIds] }
         : emptyItem(category()),
     );
     setEditing({ kind: "item", id: it?.id ?? null });
@@ -72,6 +78,26 @@ export function MenuPage() {
     setCat(c ? { name: c.name, nameAr: c.nameAr ?? "", color: c.color, kitchen: c.kitchen }
       : { name: "", nameAr: "", color: bandColors[categories().length % bandColors.length]!.hex, kitchen: false });
     setEditing({ kind: "category", id: c?.id ?? null });
+  };
+  // What the cost field means for this item, as it stands.
+  const costHint = () => {
+    const price = parseAmount(item.price);
+    const cost = item.cost.trim() === "" ? null : parseAmount(item.cost);
+    if (item.cost.trim() === "")
+      return item.savedCost === null
+        ? "Only you see it, never the till. With it, Sales shows what this item makes."
+        : "Empty, later sales of it show no profit. Earlier ones keep their cost.";
+    if (cost === null) return "In dirhams, like 0.45.";
+    const parts: string[] = [];
+    if (price !== null && price > 0) {
+      const profit = price - cost;
+      parts.push(`${formatFils(profit)} profit on each, ${Math.round((profit / price) * 100)}% of the price, before options.`);
+    }
+    if (editing()?.id && cost !== item.savedCost)
+      parts.push(item.savedCost === null
+        ? "It counts for earlier sales too, as they had no cost."
+        : `Sales from now on use it; earlier ones keep ${formatFils(item.savedCost)}.`);
+    return parts.join(" ");
   };
   const close = () => {
     reset();
@@ -101,12 +127,16 @@ export function MenuPage() {
     save(async () => {
       const priceFils = parseAmount(item.price);
       if (priceFils === null) throw { field: "priceFils", message: "Enter a price like 2.50." };
+      const costFils = item.cost.trim() === "" ? null : parseAmount(item.cost);
+      if (costFils === null && item.cost.trim() !== "")
+        throw { field: "costFils", message: "Enter a cost like 0.45, or leave it empty." };
       const order = groups().map((g) => g.id);
       const body = {
         categoryId: item.categoryId,
         name: item.name,
         nameAr: item.nameAr,
         priceFils,
+        costFils,
         kitchen: item.kitchen,
         modifierGroupIds: [...item.groupIds].sort((a, b) => order.indexOf(a) - order.indexOf(b)),
       };
@@ -233,12 +263,14 @@ export function MenuPage() {
             <div class="tiles narrow-preview" aria-hidden="true">
               <Tile name={item.name} nameAr={item.nameAr} priceFils={parseAmount(item.price)} color={draftColor()} />
             </div>
-            <FormError error={error()} fields={["name", "nameAr", "priceFils"]} />
+            <FormError error={error()} fields={["name", "nameAr", "priceFils", "costFils"]} />
             <Field label="Name" value={item.name} onInput={(v) => setItem("name", v)} error={fieldError(error(), "name")} />
             <Field label="Arabic name" value={item.nameAr} rtl onInput={(v) => setItem("nameAr", v)}
               error={fieldError(error(), "nameAr")} />
             <Field label="Price" value={item.price} inputMode="decimal" placeholder="2.50"
               onInput={(v) => setItem("price", v)} error={fieldError(error(), "priceFils")} hint="In dirhams" />
+            <Field label="Cost to make or buy (optional)" value={item.cost} inputMode="decimal"
+              onInput={(v) => setItem("cost", v)} error={fieldError(error(), "costFils")} hint={costHint()} />
             <label class="field">
               <span>Category</span>
               <select class="input" value={item.categoryId} onChange={(e) => setItem("categoryId", e.currentTarget.value)}>

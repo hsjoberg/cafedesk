@@ -370,6 +370,9 @@ then set DATABASE_URL to .../cafedesk_demo and run demo again`)
 	if err := st.SeedDemoMenu(ctx, o.ID); err != nil {
 		return fmt.Errorf("demo menu: %w", err)
 	}
+	if err := st.SeedDemoCosts(ctx, o.ID); err != nil {
+		return fmt.Errorf("demo costs: %w", err)
+	}
 	people := []struct {
 		name string
 		role api.StaffRole

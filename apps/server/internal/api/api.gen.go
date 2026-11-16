@@ -294,7 +294,13 @@ type HourSales struct {
 // Item defines model for Item.
 type Item struct {
 	CategoryId openapi_types.UUID `json:"categoryId"`
-	Id         openapi_types.UUID `json:"id"`
+
+	// CostFils What one costs the shop to make or buy, or null for not known.
+	// Admin only: tills never get it. A change applies to sales from
+	// now on, except an item's first cost, which applies to its earlier
+	// sales too, as they had none.
+	CostFils *int64             `json:"costFils"`
+	Id       openapi_types.UUID `json:"id"`
 
 	// Kitchen Prints on the kitchen ticket.
 	Kitchen bool `json:"kitchen"`
@@ -311,6 +317,12 @@ type Item struct {
 type ItemInput struct {
 	CategoryId openapi_types.UUID `json:"categoryId"`
 
+	// CostFils What one costs the shop to make or buy, or null for not known.
+	// Admin only: tills never get it. A change applies to sales from
+	// now on, except an item's first cost, which applies to its earlier
+	// sales too, as they had none.
+	CostFils *int64 `json:"costFils"`
+
 	// Kitchen Prints on the kitchen ticket.
 	Kitchen bool `json:"kitchen"`
 
@@ -323,6 +335,8 @@ type ItemInput struct {
 
 // ItemSales defines model for ItemSales.
 type ItemSales struct {
+	// CostFils What they cost; missing when the item had no cost for some of these sales.
+	CostFils  *int64 `json:"costFils,omitempty"`
 	GrossFils int64  `json:"grossFils"`
 	ItemId    string `json:"itemId"`
 
@@ -343,6 +357,11 @@ type Me struct {
 
 // Modifier defines model for Modifier.
 type Modifier struct {
+	// CostFils What it adds to the cost of the item, as an extra parotta does,
+	// or null for nothing known (counted as nothing). Applies as an
+	// item's cost does.
+	CostFils *int64 `json:"costFils"`
+
 	// Id Set to keep an existing modifier; left out for a new one.
 	Id openapi_types.UUID `json:"id"`
 
@@ -378,6 +397,11 @@ type ModifierGroupInput struct {
 
 // ModifierInput defines model for ModifierInput.
 type ModifierInput struct {
+	// CostFils What it adds to the cost of the item, as an extra parotta does,
+	// or null for nothing known (counted as nothing). Applies as an
+	// item's cost does.
+	CostFils *int64 `json:"costFils"`
+
 	// Id Set to keep an existing modifier; left out for a new one.
 	Id *openapi_types.UUID `json:"id,omitempty"`
 
@@ -528,20 +552,30 @@ type SalesReport struct {
 
 // SalesTotals defines model for SalesTotals.
 type SalesTotals struct {
-	CardFils  int64 `json:"cardFils"`
-	CashFils  int64 `json:"cashFils"`
+	CardFils int64 `json:"cardFils"`
+	CashFils int64 `json:"cashFils"`
+
+	// CostFils What the sales with a known cost cost.
+	CostFils  int64 `json:"costFils"`
 	GrossFils int64 `json:"grossFils"`
 
 	// NetFils Sales less refunds.
 	NetFils int64 `json:"netFils"`
 
 	// Orders Completed orders; voided ones aren't sales.
-	Orders          int   `json:"orders"`
+	Orders int `json:"orders"`
+
+	// ProfitFils Sales with a known cost, less their refunds, less what they cost.
+	// Sales of items without a cost aren't in it.
+	ProfitFils      int64 `json:"profitFils"`
 	Refunds         int   `json:"refunds"`
 	RefundsCashFils int64 `json:"refundsCashFils"`
 	RefundsFils     int64 `json:"refundsFils"`
-	Voids           int   `json:"voids"`
-	VoidsFils       int64 `json:"voidsFils"`
+
+	// UncostedFils Sales of items without a cost, left out of the profit.
+	UncostedFils int64 `json:"uncostedFils"`
+	Voids        int   `json:"voids"`
+	VoidsFils    int64 `json:"voidsFils"`
 }
 
 // Shop defines model for Shop.

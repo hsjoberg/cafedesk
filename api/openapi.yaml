@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
 
@@ -721,7 +721,7 @@ components:
 
     ItemInput:
       type: object
-      required: [categoryId, name, priceFils, kitchen, modifierGroupIds]
+      required: [categoryId, name, priceFils, kitchen, modifierGroupIds, costFils]
       properties:
         categoryId:
           type: string
@@ -737,6 +737,16 @@ components:
         kitchen:
           type: boolean
           description: Prints on the kitchen ticket.
+        costFils:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: |
+            What one costs the shop to make or buy, or null for not known.
+            Admin only: tills never get it. A change applies to sales from
+            now on, except an item's first cost, which applies to its earlier
+            sales too, as they had none.
         modifierGroupIds:
           type: array
           description: The item's option groups, in order.
@@ -757,7 +767,7 @@ components:
 
     ModifierInput:
       type: object
-      required: [name, priceDeltaFils, isDefault]
+      required: [name, priceDeltaFils, isDefault, costFils]
       properties:
         id:
           type: string
@@ -774,6 +784,15 @@ components:
         isDefault:
           type: boolean
           description: Chosen when the item is tapped.
+        costFils:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+          description: |
+            What it adds to the cost of the item, as an extra parotta does,
+            or null for nothing known (counted as nothing). Applies as an
+            item's cost does.
     Modifier:
       allOf:
         - $ref: "#/components/schemas/ModifierInput"
@@ -960,7 +979,8 @@ components:
             $ref: "#/components/schemas/DayClose"
     SalesTotals:
       type: object
-      required: [orders, grossFils, cashFils, cardFils, refunds, refundsFils, refundsCashFils, voids, voidsFils, netFils]
+      required: [orders, grossFils, cashFils, cardFils, refunds, refundsFils, refundsCashFils, voids, voidsFils, netFils,
+        costFils, profitFils, uncostedFils]
       properties:
         orders:
           type: integer
@@ -991,6 +1011,20 @@ components:
           type: integer
           format: int64
           description: Sales less refunds.
+        costFils:
+          type: integer
+          format: int64
+          description: What the sales with a known cost cost.
+        profitFils:
+          type: integer
+          format: int64
+          description: |
+            Sales with a known cost, less their refunds, less what they cost.
+            Sales of items without a cost aren't in it.
+        uncostedFils:
+          type: integer
+          format: int64
+          description: Sales of items without a cost, left out of the profit.
     DaySales:
       type: object
       required: [date, orders, grossFils, refundsFils, netFils]
@@ -1035,6 +1069,10 @@ components:
         grossFils:
           type: integer
           format: int64
+        costFils:
+          type: integer
+          format: int64
+          description: What they cost; missing when the item had no cost for some of these sales.
     TillSales:
       type: object
       required: [terminalId, code, name, orders, grossFils, refundsFils, netFils]

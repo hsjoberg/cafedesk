@@ -500,6 +500,14 @@ export interface components {
             priceFils: number;
             /** @description Prints on the kitchen ticket. */
             kitchen: boolean;
+            /**
+             * Format: int64
+             * @description What one costs the shop to make or buy, or null for not known.
+             *     Admin only: tills never get it. A change applies to sales from
+             *     now on, except an item's first cost, which applies to its earlier
+             *     sales too, as they had none.
+             */
+            costFils: number | null;
             /** @description The item's option groups, in order. */
             modifierGroupIds: string[];
         };
@@ -523,6 +531,13 @@ export interface components {
             priceDeltaFils: number;
             /** @description Chosen when the item is tapped. */
             isDefault: boolean;
+            /**
+             * Format: int64
+             * @description What it adds to the cost of the item, as an extra parotta does,
+             *     or null for nothing known (counted as nothing). Applies as an
+             *     item's cost does.
+             */
+            costFils: number | null;
         };
         Modifier: components["schemas"]["ModifierInput"] & {
             position: number;
@@ -644,6 +659,22 @@ export interface components {
              * @description Sales less refunds.
              */
             netFils: number;
+            /**
+             * Format: int64
+             * @description What the sales with a known cost cost.
+             */
+            costFils: number;
+            /**
+             * Format: int64
+             * @description Sales with a known cost, less their refunds, less what they cost.
+             *     Sales of items without a cost aren't in it.
+             */
+            profitFils: number;
+            /**
+             * Format: int64
+             * @description Sales of items without a cost, left out of the profit.
+             */
+            uncostedFils: number;
         };
         DaySales: {
             date: components["schemas"]["LocalDate"];
@@ -668,6 +699,11 @@ export interface components {
             qty: number;
             /** Format: int64 */
             grossFils: number;
+            /**
+             * Format: int64
+             * @description What they cost; missing when the item had no cost for some of these sales.
+             */
+            costFils?: number;
         };
         TillSales: {
             /** Format: uuid */
