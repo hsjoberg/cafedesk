@@ -4,6 +4,8 @@
 //	server                 serve (migrating the database first)
 //	server migrate         migrate the database and exit
 //	server setup -org ...  create the organization, its first shop and owner
+//	server demo            fill a new, empty database with a demo shop and a
+//	                       month of made-up sales, to show or try the admin
 //
 // Environment: DATABASE_URL (required), PORT (8080), CAFEDESK_TRUST_PROXY=1
 // behind a proxy such as Railway's, CAFEDESK_INSECURE_COOKIES=1 only for
@@ -23,12 +25,14 @@ import (
 	"syscall"
 	"time"
 
+	"cafedesk/apps/server/internal/api"
 	"cafedesk/apps/server/internal/auth"
 	"cafedesk/apps/server/internal/db"
 	"cafedesk/apps/server/internal/server"
 	"cafedesk/apps/server/internal/store"
 	"cafedesk/apps/server/web"
 
+	"github.com/google/uuid"
 	"golang.org/x/term"
 )
 
@@ -49,8 +53,10 @@ func main() {
 		err = migrate(log)
 	case "setup":
 		err = setup(args)
+	case "demo":
+		err = demo(args)
 	default:
-		err = fmt.Errorf("unknown command %q: use serve, migrate or setup", cmd)
+		err = fmt.Errorf("unknown command %q: use serve, migrate, setup or demo", cmd)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -182,6 +188,83 @@ func setup(args []string) error {
 		}
 	}
 	fmt.Printf("Set up %s with the shop %s. Sign in to the admin as %s.\n", o.Name, sh.Name, *email)
+	return nil
+}
+
+// demo fills a new database with a demo organization: the demo menu, three
+// till staff, two tills and a month of made-up sales. It refuses a database
+// that is set up, so it never mixes into a real shop's.
+func demo(args []string) error {
+	fs := flag.NewFlagSet("demo", flag.ExitOnError)
+	days := fs.Int("days", 30, "how many days of sales, up to today")
+	fs.Parse(args)
+	if *days < 1 || *days > 400 {
+		return errors.New("-days is 1 to 400")
+	}
+	ctx := context.Background()
+	st, closeDB, err := openStore(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+	if done, err := st.IsSetUp(ctx); err != nil {
+		return err
+	} else if done {
+		return errors.New(`this database is set up already. The demo needs one of its own, empty, e.g.:
+  docker compose exec postgres createdb -U cafedesk cafedesk_demo
+then set DATABASE_URL to .../cafedesk_demo and run demo again`)
+	}
+	// A password of its own, shown once, unless one is given: a demo
+	// database on a reachable server must not open with a known password.
+	password := os.Getenv("CAFEDESK_OWNER_PASSWORD")
+	if password == "" {
+		token, _, err := auth.NewToken()
+		if err != nil {
+			return err
+		}
+		password = token[:16]
+	}
+	if err := auth.CheckPasswordStrength(password); err != nil {
+		return err
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	const email = "demo@cafedesk.test"
+	o, sh, _, err := st.Setup(ctx, "Demo café", "Demo shop", "Demo owner", email, hash)
+	if err != nil {
+		return err
+	}
+	if err := st.SeedDemoMenu(ctx, o.ID); err != nil {
+		return fmt.Errorf("demo menu: %w", err)
+	}
+	people := []struct {
+		name string
+		role api.StaffRole
+		pin  string
+	}{{"Ravi", api.StaffRoleManager, "5678"}, {"Anil", api.StaffRoleCashier, "2468"}, {"Priya", api.StaffRoleCashier, "1357"}}
+	var manager store.DemoStaff
+	var cashiers []store.DemoStaff
+	for _, p := range people {
+		s, err := st.CreateStaff(ctx, o.ID, api.StaffInput{Name: p.name, Role: p.role, ShopIds: []uuid.UUID{sh.ID},
+			Active: true}, auth.HashPIN(p.pin))
+		if err != nil {
+			return fmt.Errorf("demo staff: %w", err)
+		}
+		if p.role == api.StaffRoleManager {
+			manager = store.DemoStaff{ID: s.Id, Name: s.Name}
+		} else {
+			cashiers = append(cashiers, store.DemoStaff{ID: s.Id, Name: s.Name})
+		}
+	}
+	if err := st.SeedDemoSales(ctx, o.ID, sh.ID, manager, cashiers, *days, time.Now(), 1); err != nil {
+		return fmt.Errorf("demo sales: %w", err)
+	}
+	fmt.Printf(`Set up %s with %d days of made-up sales.
+Sign in to the admin as %s with the password %s
+Starting PINs for a till: Ravi (manager) 5678, Anil 2468, Priya 1357.
+`, o.Name, *days, email, password)
 	return nil
 }
 

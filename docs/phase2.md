@@ -117,6 +117,32 @@ go run .
 commands above work, but the password prompt may not; then set
 `CAFEDESK_OWNER_PASSWORD` for the `setup` run instead.
 
+### A demo to show or try
+
+`demo` fills a database of its own with a made-up shop: the demo menu, three
+staff, two tills and a month of sales up to today, with cash counts (a few
+short or over), voids and refunds. It refuses a database that is set up, so
+it never mixes into a real one.
+
+```powershell
+docker compose exec postgres createdb -U cafedesk cafedesk_demo
+cd apps\server
+$env:DATABASE_URL = 'postgres://cafedesk:cafedesk@localhost:5432/cafedesk_demo?sslmode=disable'
+go run . demo            # -days 90 for more
+$env:PORT = '8090'       # beside the real one on 8080
+go run .
+```
+
+It prints the sign-in, `demo@cafedesk.test`, with a new password each time
+(or set `CAFEDESK_OWNER_PASSWORD` first), and the tills' starting PINs. The
+two tills show as connected but no PC holds their keys; "Connect a new PC" on
+Tills connects a real till to the demo. The sales end the day `demo` ran: for
+fresh ones, drop the database and run it again:
+
+```powershell
+docker compose exec postgres dropdb -U cafedesk cafedesk_demo
+```
+
 ## The admin
 
 - **Sales**, the first page after signing in: what the shops took on a date or
