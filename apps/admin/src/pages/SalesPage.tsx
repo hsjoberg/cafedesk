@@ -2,6 +2,7 @@ import { A, useSearchParams } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js";
 import { api, call, type DayClose, type SalesReport, type Terminal } from "../api/client";
 import { ColumnChart, type Column } from "../components/ColumnChart";
+import { OverdueInvoices } from "../components/Overdue";
 import { daysBetween, isDate, longDate, presets, rangeLabel, shortDate, todayIn } from "../dates";
 import { formatAmount } from "../money";
 import { me } from "../state";
@@ -131,6 +132,7 @@ export function SalesPage() {
         <div class="wall-head">
           <h1>Sales</h1>
         </div>
+        <OverdueInvoices />
         <div class="filters" role="group" aria-label="Dates">
           <For each={presets}>
             {(p) => (

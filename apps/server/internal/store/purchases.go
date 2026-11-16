@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -23,22 +24,56 @@ func nameKey(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 
 // ListSuppliers lists an organization's suppliers, by name.
 func (s *Store) ListSuppliers(ctx context.Context, orgID uuid.UUID) ([]api.Supplier, error) {
-	rows, err := s.pool.Query(ctx, "SELECT id, name FROM suppliers WHERE org_id = $1 AND NOT archived ORDER BY lower(name)", orgID)
+	// How often a supplier's invoices come: the median gap between its last
+	// six purchase dates, so one late or extra invoice doesn't move it.
+	rows, err := s.pool.Query(ctx, `SELECT s.id, s.name,
+			(SELECT MAX(date)::text FROM purchases WHERE supplier_id = s.id AND deleted_at IS NULL),
+			(SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY gap) FROM (
+				SELECT date - lag(date) OVER (ORDER BY date) AS gap FROM (
+					SELECT DISTINCT date FROM purchases WHERE supplier_id = s.id AND deleted_at IS NULL
+					ORDER BY date DESC LIMIT 6) d6) g
+				WHERE gap > 0),
+			s.watched, s.quiet_until::text
+		FROM suppliers s WHERE s.org_id = $1 AND NOT s.archived ORDER BY lower(s.name)`, orgID)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (api.Supplier, error) {
 		var x api.Supplier
-		return x, r.Scan(&x.Id, &x.Name)
+		return x, r.Scan(&x.Id, &x.Name, &x.LastPurchasedOn, &x.UsualDays, &x.Watched, &x.QuietUntil)
 	})
+}
+
+// UpdateSupplier sets whether a supplier's overdue invoices are warned of,
+// and a date they are quiet until.
+func (s *Store) UpdateSupplier(ctx context.Context, orgID, id uuid.UUID, in api.SupplierInput) (api.Supplier, error) {
+	tag, err := s.pool.Exec(ctx, `UPDATE suppliers SET watched = $3, quiet_until = $4::date
+		WHERE id = $1 AND org_id = $2 AND NOT archived`, id, orgID, in.Watched, in.QuietUntil)
+	if err != nil {
+		return api.Supplier{}, err
+	}
+	if tag.RowsAffected() == 0 {
+		return api.Supplier{}, ErrNotFound
+	}
+	list, err := s.ListSuppliers(ctx, orgID)
+	if err != nil {
+		return api.Supplier{}, err
+	}
+	for _, x := range list {
+		if x.Id == id {
+			return x, nil
+		}
+	}
+	return api.Supplier{}, ErrNotFound
 }
 
 // ListProducts lists what an organization buys, by name, each with its
 // latest purchase.
 func (s *Store) ListProducts(ctx context.Context, orgID uuid.UUID) ([]api.Product, error) {
-	rows, err := s.pool.Query(ctx, `SELECT p.id, p.name, p.area, last.unit_price_fils, last.qty_milli, last.date::text
+	rows, err := s.pool.Query(ctx, `SELECT p.id, p.name, p.area, last.unit_price_fils, last.qty_milli, last.date::text,
+			p.ingredient_id, p.pack_milli, p.code, (last.total_fils * 1000.0 / last.qty_milli)::float8
 		FROM products p LEFT JOIN LATERAL (
-			SELECT l.unit_price_fils, l.qty_milli, pu.date FROM purchase_lines l JOIN purchases pu ON pu.id = l.purchase_id
+			SELECT l.unit_price_fils, l.qty_milli, l.total_fils, pu.date FROM purchase_lines l JOIN purchases pu ON pu.id = l.purchase_id
 			WHERE l.product_id = p.id AND pu.deleted_at IS NULL
 			ORDER BY pu.date DESC, pu.created_at DESC, l.position DESC LIMIT 1) last ON true
 		WHERE p.org_id = $1 AND NOT p.archived ORDER BY lower(p.name)`, orgID)
@@ -47,11 +82,16 @@ func (s *Store) ListProducts(ctx context.Context, orgID uuid.UUID) ([]api.Produc
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (api.Product, error) {
 		var x api.Product
-		var qty *int64
-		err := r.Scan(&x.Id, &x.Name, &x.Area, &x.LastUnitPriceFils, &qty, &x.LastPurchasedOn)
+		var qty, pack *int64
+		err := r.Scan(&x.Id, &x.Name, &x.Area, &x.LastUnitPriceFils, &qty, &x.LastPurchasedOn, &x.IngredientId, &pack,
+			&x.Code, &x.LastCostEachFils)
 		if qty != nil {
 			q := Unmilli(*qty)
 			x.LastQuantity = &q
+		}
+		if pack != nil {
+			p := Unmilli(*pack)
+			x.PackAmount = &p
 		}
 		return x, err
 	})
@@ -98,20 +138,74 @@ func productFor(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, l api.PurchaseL
 			return id, "", &Problem{ErrNotFound, "One of the products doesn't exist."}
 		}
 	} else {
+		code := strings.TrimSpace(deref(l.ProductCode))
 		name = strings.TrimSpace(deref(l.ProductName))
-		err = tx.QueryRow(ctx, "SELECT id, name FROM products WHERE org_id = $1 AND lower(name) = $2 AND NOT archived",
-			orgID, nameKey(name)).Scan(&id, &name)
+		err = pgx.ErrNoRows
+		if code != "" {
+			// A supplier's code names its product, whatever the name says.
+			err = tx.QueryRow(ctx, `SELECT p.id, p.name FROM products p WHERE p.org_id = $1 AND p.code = $2 AND NOT p.archived
+				ORDER BY p.updated_at DESC LIMIT 1`, orgID, code).Scan(&id, &name)
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			err = tx.QueryRow(ctx, "SELECT id, name FROM products WHERE org_id = $1 AND lower(name) = $2 AND NOT archived",
+				orgID, nameKey(deref(l.ProductName))).Scan(&id, &name)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			id = newID()
-			_, err = tx.Exec(ctx, "INSERT INTO products (id, org_id, name, area) VALUES ($1, $2, $3, $4)", id, orgID, name, string(l.Area))
-			return id, name, err
+			if _, err = tx.Exec(ctx, "INSERT INTO products (id, org_id, name, area, code) VALUES ($1, $2, $3, $4, $5)",
+				id, orgID, name, string(l.Area), nilIfEmpty(code)); err != nil {
+				return id, name, err
+			}
+			return id, name, sortProduct(ctx, tx, orgID, id, l)
+		}
+		if err == nil && code != "" {
+			// A known product learns its code the first time an invoice gives it.
+			if _, err = tx.Exec(ctx, "UPDATE products SET code = $2 WHERE id = $1 AND code IS NULL", id, code); err != nil {
+				return id, name, err
+			}
 		}
 	}
 	if err != nil {
 		return id, name, err
 	}
-	_, err = tx.Exec(ctx, "UPDATE products SET area = $2, updated_at = now() WHERE id = $1 AND area <> $2", id, string(l.Area))
-	return id, name, err
+	if _, err = tx.Exec(ctx, "UPDATE products SET area = $2, updated_at = now() WHERE id = $1 AND area <> $2",
+		id, string(l.Area)); err != nil {
+		return id, name, err
+	}
+	return id, name, sortProduct(ctx, tx, orgID, id, l)
+}
+
+// sortProduct gives a product the ingredient and pack size a purchase line
+// names, if it belongs to no ingredient yet: a product is sorted once, on
+// the Ingredients page or as it is first bought, never re-sorted by a
+// purchase.
+func sortProduct(ctx context.Context, tx pgx.Tx, orgID, id uuid.UUID, l api.PurchaseLineInput) error {
+	if l.IngredientId == nil {
+		return nil
+	}
+	var ok bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM ingredients WHERE id = $1 AND org_id = $2 AND NOT archived)",
+		*l.IngredientId, orgID).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return &Problem{ErrNotFound, "That ingredient doesn't exist."}
+	}
+	var pack *int64
+	if l.PackAmount != nil {
+		m := Milli(*l.PackAmount)
+		pack = &m
+	}
+	_, err := tx.Exec(ctx, `UPDATE products SET ingredient_id = $2, pack_milli = $3, updated_at = now()
+		WHERE id = $1 AND ingredient_id IS NULL`, id, *l.IngredientId, pack)
+	return err
+}
+
+func nilIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func deref(p *string) string {
@@ -136,24 +230,58 @@ func savePurchase(ctx context.Context, tx pgx.Tx, orgID, id uuid.UUID, in api.Pu
 	if err != nil {
 		return err
 	}
+	// An invoice recorded twice counts twice: one supplier's invoice number
+	// is recorded once.
+	if ref := strings.TrimSpace(deref(in.Reference)); supplier != nil && ref != "" {
+		var on *string
+		err := tx.QueryRow(ctx, `SELECT date::text FROM purchases WHERE org_id = $1 AND supplier_id = $2
+			AND lower(reference) = lower($3) AND id <> $4 AND deleted_at IS NULL LIMIT 1`, orgID, *supplier, ref, id).Scan(&on)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if on != nil {
+			var name string
+			if err := tx.QueryRow(ctx, "SELECT name FROM suppliers WHERE id = $1", *supplier).Scan(&name); err != nil {
+				return err
+			}
+			when := *on
+			if d, err := time.Parse(dateLayout, *on); err == nil {
+				when = d.Format("2 Jan 2006")
+			}
+			return &Problem{ErrConflict, fmt.Sprintf("Invoice %s from %s is already recorded, on %s.", ref, name, when)}
+		}
+	}
 	if _, err := tx.Exec(ctx, "DELETE FROM purchase_lines WHERE purchase_id = $1", id); err != nil {
 		return err
 	}
-	var total int64
+	var total, vat int64
+	before := in.PricesBeforeVat != nil && *in.PricesBeforeVat
 	for i, l := range in.Lines {
 		product, _, err := productFor(ctx, tx, orgID, l)
 		if err != nil {
 			return err
 		}
+		var lineVAT int64
+		if before && l.VatFils != nil {
+			lineVAT = *l.VatFils
+		}
 		total += l.TotalFils
+		vat += lineVAT
 		if _, err := tx.Exec(ctx, `INSERT INTO purchase_lines (purchase_id, position, product_id, area, qty_milli,
-			unit_price_fils, total_fils) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			id, i, product, string(l.Area), Milli(l.Quantity), l.UnitPriceFils, l.TotalFils); err != nil {
+			unit_price_fils, total_fils, vat_fils) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			id, i, product, string(l.Area), Milli(l.Quantity), l.UnitPriceFils, l.TotalFils, lineVAT); err != nil {
 			return err
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE purchases SET shop_id = $2, date = $3::date, supplier_id = $4, reference = $5, total_fils = $6
-		WHERE id = $1`, id, in.ShopId, in.Date, supplier, strings.TrimSpace(deref(in.Reference)), total)
+	if supplier != nil {
+		// Its invoice is in: no more quiet.
+		if _, err := tx.Exec(ctx, "UPDATE suppliers SET quiet_until = NULL WHERE id = $1", *supplier); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(ctx, `UPDATE purchases SET shop_id = $2, date = $3::date, supplier_id = $4, reference = $5, total_fils = $6,
+		prices_before_vat = $7, vat_fils = $8 WHERE id = $1`,
+		id, in.ShopId, in.Date, supplier, strings.TrimSpace(deref(in.Reference)), total, before, vat)
 	return err
 }
 
@@ -204,7 +332,7 @@ func (s *Store) DeletePurchase(ctx context.Context, orgID, userID, id uuid.UUID,
 }
 
 const purchaseSelect = `SELECT p.id, p.shop_id, p.date::text, p.supplier_id, s.name, p.reference, p.total_fils,
-	p.created_at, cu.name, p.updated_at, uu.name
+	p.created_at, cu.name, p.updated_at, uu.name, p.vat_fils, p.prices_before_vat
 	FROM purchases p JOIN users cu ON cu.id = p.created_by LEFT JOIN users uu ON uu.id = p.updated_by
 	LEFT JOIN suppliers s ON s.id = p.supplier_id`
 
@@ -219,7 +347,7 @@ func (s *Store) purchases(ctx context.Context, q pgx.Tx, where string, args ...a
 		var supplierID *uuid.UUID
 		var supplierName *string
 		err := r.Scan(&x.Id, &x.ShopId, &x.Date, &supplierID, &supplierName, &x.Reference, &x.TotalFils,
-			&x.CreatedAt, &x.CreatedByName, &x.UpdatedAt, &x.UpdatedByName)
+			&x.CreatedAt, &x.CreatedByName, &x.UpdatedAt, &x.UpdatedByName, &x.VatFils, &x.PricesBeforeVat)
 		if supplierID != nil {
 			x.Supplier = &api.Supplier{Id: *supplierID, Name: deref(supplierName)}
 		}
@@ -234,7 +362,8 @@ func (s *Store) purchases(ctx context.Context, q pgx.Tx, where string, args ...a
 	for i, p := range list {
 		ids[i], at[p.Id] = p.Id, i
 	}
-	rows, err = q.Query(ctx, `SELECT l.purchase_id, l.product_id, pr.name, l.area, l.qty_milli, l.unit_price_fils, l.total_fils
+	rows, err = q.Query(ctx, `SELECT l.purchase_id, l.product_id, pr.name, l.area, l.qty_milli, l.unit_price_fils, l.total_fils,
+			l.vat_fils, pr.code
 		FROM purchase_lines l JOIN products pr ON pr.id = l.product_id
 		WHERE l.purchase_id = ANY($1) ORDER BY l.purchase_id, l.position`, ids)
 	if err != nil {
@@ -244,7 +373,8 @@ func (s *Store) purchases(ctx context.Context, q pgx.Tx, where string, args ...a
 		var pid uuid.UUID
 		var l api.PurchaseLine
 		var qty int64
-		if err := rows.Scan(&pid, &l.ProductId, &l.ProductName, &l.Area, &qty, &l.UnitPriceFils, &l.TotalFils); err != nil {
+		if err := rows.Scan(&pid, &l.ProductId, &l.ProductName, &l.Area, &qty, &l.UnitPriceFils, &l.TotalFils,
+			&l.VatFils, &l.ProductCode); err != nil {
 			return nil, err
 		}
 		l.Quantity = Unmilli(qty)

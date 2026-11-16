@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.6.0
+  version: 0.9.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
 
@@ -568,6 +568,29 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Supplier"
+  /v1/admin/suppliers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateSupplier
+      summary: Whether a supplier's overdue invoices are warned of, and if it is quiet until a date.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /v1/admin/products:
     get:
       operationId: listProducts
@@ -581,6 +604,98 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Product"
+
+  /v1/admin/products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateProduct
+      summary: Saves a product's name, area, ingredient and pack size.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /v1/admin/ingredients:
+    get:
+      operationId: listIngredients
+      summary: What recipes use, by name, each with its price per unit from recent purchases.
+      responses:
+        "200":
+          description: The ingredients.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ingredient"
+    post:
+      operationId: createIngredient
+      summary: Adds an ingredient.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngredientInput"
+      responses:
+        "201":
+          description: Added.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ingredient"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /v1/admin/ingredients/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateIngredient
+      summary: Saves an ingredient's name and unit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngredientInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ingredient"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteIngredient
+      summary: Deletes an ingredient. Its products stay, belonging to none.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/Error"
 
   /v1/terminal/pair:
     post:
@@ -1273,15 +1388,38 @@ components:
       description: |
         Where a purchase goes: the counter (tea and drinks), the kitchen,
         packaging (cups, boxes, bags), or other.
+    SupplierInput:
+      type: object
+      required: [watched, quietUntil]
+      properties:
+        watched:
+          type: boolean
+          description: Warn when its invoice is overdue. Off for an occasional supplier.
+        quietUntil:
+          type: string
+          nullable: true
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: No warning through this date, YYYY-MM-DD; null for none.
     Supplier:
       type: object
-      required: [id, name]
+      required: [id, name, watched]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+        lastPurchasedOn:
+          $ref: "#/components/schemas/LocalDate"
+        usualDays:
+          type: integer
+          description: |
+            How many days apart its purchases usually are: the median gap of
+            its last six purchase dates. Missing until it has two.
+        watched:
+          type: boolean
+        quietUntil:
+          $ref: "#/components/schemas/LocalDate"
     Product:
       type: object
       required: [id, name, area]
@@ -1304,6 +1442,76 @@ components:
           description: How many its latest purchase took.
         lastPurchasedOn:
           $ref: "#/components/schemas/LocalDate"
+        code:
+          type: string
+          description: The supplier's code for it, as on its invoices.
+        lastCostEachFils:
+          type: number
+          format: double
+          description: What one cost in its latest purchase, as paid, VAT included.
+        ingredientId:
+          type: string
+          format: uuid
+          description: The ingredient it is, if it is one recipes use.
+        packAmount:
+          type: number
+          format: double
+          description: How much of its ingredient one holds, in the ingredient's unit, e.g. 8160 (g).
+    ProductInput:
+      type: object
+      required: [name, area, ingredientId, packAmount]
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+          description: The supplier's code; empty for none.
+        area:
+          $ref: "#/components/schemas/Area"
+        ingredientId:
+          type: string
+          format: uuid
+          nullable: true
+        packAmount:
+          type: number
+          format: double
+          nullable: true
+          description: Up to 3 decimals; null when not known, or with no ingredient.
+    Unit:
+      type: string
+      enum: [g, ml, piece]
+    IngredientInput:
+      type: object
+      required: [name, unit]
+      properties:
+        name:
+          type: string
+          description: What recipes call it, e.g. "Evaporated milk".
+        unit:
+          $ref: "#/components/schemas/Unit"
+    Ingredient:
+      type: object
+      required: [id, name, unit, products]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        unit:
+          $ref: "#/components/schemas/Unit"
+        products:
+          type: integer
+          description: How many products are this ingredient.
+        unitCostFils:
+          type: number
+          format: double
+          description: |
+            Fils per unit (per g, ml or piece), from the latest three purchase
+            lines of its products that have a pack size, weighted by quantity.
+            Missing until one is bought with a pack size known.
+        pricedOn:
+          $ref: "#/components/schemas/LocalDate"
     PurchaseLineInput:
       type: object
       required: [area, quantity, unitPriceFils, totalFils]
@@ -1315,6 +1523,26 @@ components:
         productName:
           type: string
           description: A product by name, added if it is new.
+        productCode:
+          type: string
+          description: |
+            The supplier's code for the product. A known code names its
+            product before the name does; a new product keeps it.
+        vatFils:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The VAT in totalFils, when the prices were before VAT.
+        ingredientId:
+          type: string
+          format: uuid
+          description: |
+            The ingredient the product is, with packAmount: taken only if the
+            product belongs to no ingredient yet, as a new one doesn't.
+        packAmount:
+          type: number
+          format: double
+          description: How much of the ingredient one holds, in its unit.
         area:
           $ref: "#/components/schemas/Area"
         quantity:
@@ -1332,8 +1560,13 @@ components:
           description: The line's amount, as the invoice has it.
     PurchaseLine:
       type: object
-      required: [productId, productName, area, quantity, unitPriceFils, totalFils]
+      required: [productId, productName, area, quantity, unitPriceFils, totalFils, vatFils]
       properties:
+        productCode:
+          type: string
+        vatFils:
+          type: integer
+          format: int64
         productId:
           type: string
           format: uuid
@@ -1368,14 +1601,25 @@ components:
         reference:
           type: string
           description: The invoice or receipt number.
+        pricesBeforeVat:
+          type: boolean
+          description: |
+            The unit prices are before VAT, as a wholesaler's invoice has them;
+            each line's total is what was paid, VAT included.
         lines:
           type: array
           items:
             $ref: "#/components/schemas/PurchaseLineInput"
     Purchase:
       type: object
-      required: [id, shopId, date, reference, totalFils, lines, createdAt, createdByName]
+      required: [id, shopId, date, reference, totalFils, vatFils, pricesBeforeVat, lines, createdAt, createdByName]
       properties:
+        vatFils:
+          type: integer
+          format: int64
+          description: The VAT in totalFils.
+        pricesBeforeVat:
+          type: boolean
         id:
           type: string
           format: uuid

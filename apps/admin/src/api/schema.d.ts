@@ -422,6 +422,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/suppliers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Whether a supplier's overdue invoices are warned of, and if it is quiet until a date. */
+        put: operations["updateSupplier"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/products": {
         parameters: {
             query?: never;
@@ -434,6 +453,63 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Saves a product's name, area, ingredient and pack size. */
+        put: operations["updateProduct"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/ingredients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What recipes use, by name, each with its price per unit from recent purchases. */
+        get: operations["listIngredients"];
+        put?: never;
+        /** Adds an ingredient. */
+        post: operations["createIngredient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/ingredients/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Saves an ingredient's name and unit. */
+        put: operations["updateIngredient"];
+        post?: never;
+        /** Deletes an ingredient. Its products stay, belonging to none. */
+        delete: operations["deleteIngredient"];
         options?: never;
         head?: never;
         patch?: never;
@@ -842,10 +918,24 @@ export interface components {
          * @enum {string}
          */
         Area: "counter" | "kitchen" | "packaging" | "other";
+        SupplierInput: {
+            /** @description Warn when its invoice is overdue. Off for an occasional supplier. */
+            watched: boolean;
+            /** @description No warning through this date, YYYY-MM-DD; null for none. */
+            quietUntil: string | null;
+        };
         Supplier: {
             /** Format: uuid */
             id: string;
             name: string;
+            lastPurchasedOn?: components["schemas"]["LocalDate"];
+            /**
+             * @description How many days apart its purchases usually are: the median gap of
+             *     its last six purchase dates. Missing until it has two.
+             */
+            usualDays?: number;
+            watched: boolean;
+            quietUntil?: components["schemas"]["LocalDate"];
         };
         Product: {
             /** Format: uuid */
@@ -864,6 +954,59 @@ export interface components {
              */
             lastQuantity?: number;
             lastPurchasedOn?: components["schemas"]["LocalDate"];
+            /** @description The supplier's code for it, as on its invoices. */
+            code?: string;
+            /**
+             * Format: double
+             * @description What one cost in its latest purchase, as paid, VAT included.
+             */
+            lastCostEachFils?: number;
+            /**
+             * Format: uuid
+             * @description The ingredient it is, if it is one recipes use.
+             */
+            ingredientId?: string;
+            /**
+             * Format: double
+             * @description How much of its ingredient one holds, in the ingredient's unit, e.g. 8160 (g).
+             */
+            packAmount?: number;
+        };
+        ProductInput: {
+            name: string;
+            /** @description The supplier's code; empty for none. */
+            code?: string;
+            area: components["schemas"]["Area"];
+            /** Format: uuid */
+            ingredientId: string | null;
+            /**
+             * Format: double
+             * @description Up to 3 decimals; null when not known, or with no ingredient.
+             */
+            packAmount: number | null;
+        };
+        /** @enum {string} */
+        Unit: "g" | "ml" | "piece";
+        IngredientInput: {
+            /** @description What recipes call it, e.g. "Evaporated milk". */
+            name: string;
+            unit: components["schemas"]["Unit"];
+        };
+        Ingredient: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            unit: components["schemas"]["Unit"];
+            /** @description How many products are this ingredient. */
+            products: number;
+            /**
+             * Format: double
+             * @description Fils per unit (per g, ml or piece), from the latest three purchase
+             *     lines of its products that have a pack size, weighted by quantity.
+             *     Missing until one is bought with a pack size known.
+             */
+            unitCostFils?: number;
+            pricedOn?: components["schemas"]["LocalDate"];
         };
         PurchaseLineInput: {
             /**
@@ -873,6 +1016,27 @@ export interface components {
             productId?: string;
             /** @description A product by name, added if it is new. */
             productName?: string;
+            /**
+             * @description The supplier's code for the product. A known code names its
+             *     product before the name does; a new product keeps it.
+             */
+            productCode?: string;
+            /**
+             * Format: int64
+             * @description The VAT in totalFils, when the prices were before VAT.
+             */
+            vatFils?: number;
+            /**
+             * Format: uuid
+             * @description The ingredient the product is, with packAmount: taken only if the
+             *     product belongs to no ingredient yet, as a new one doesn't.
+             */
+            ingredientId?: string;
+            /**
+             * Format: double
+             * @description How much of the ingredient one holds, in its unit.
+             */
+            packAmount?: number;
             area: components["schemas"]["Area"];
             /**
              * Format: double
@@ -888,6 +1052,9 @@ export interface components {
             totalFils: number;
         };
         PurchaseLine: {
+            productCode?: string;
+            /** Format: int64 */
+            vatFils: number;
             /** Format: uuid */
             productId: string;
             productName: string;
@@ -909,9 +1076,20 @@ export interface components {
             supplierName?: string;
             /** @description The invoice or receipt number. */
             reference?: string;
+            /**
+             * @description The unit prices are before VAT, as a wholesaler's invoice has them;
+             *     each line's total is what was paid, VAT included.
+             */
+            pricesBeforeVat?: boolean;
             lines: components["schemas"]["PurchaseLineInput"][];
         };
         Purchase: {
+            /**
+             * Format: int64
+             * @description The VAT in totalFils.
+             */
+            vatFils: number;
+            pricesBeforeVat: boolean;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -1950,6 +2128,34 @@ export interface operations {
             };
         };
     };
+    updateSupplier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplierInput"];
+            };
+        };
+        responses: {
+            /** @description Saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Supplier"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
     listProducts: {
         parameters: {
             query?: never;
@@ -1968,6 +2174,131 @@ export interface operations {
                     "application/json": components["schemas"]["Product"][];
                 };
             };
+        };
+    };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductInput"];
+            };
+        };
+        responses: {
+            /** @description Saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Product"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    listIngredients: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ingredients. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"][];
+                };
+            };
+        };
+    };
+    createIngredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngredientInput"];
+            };
+        };
+        responses: {
+            /** @description Added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
+                };
+            };
+            400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    updateIngredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngredientInput"];
+            };
+        };
+        responses: {
+            /** @description Saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ingredient"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    deleteIngredient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Error"];
         };
     };
     pairTerminal: {

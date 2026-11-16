@@ -1,6 +1,7 @@
 import { A, Navigate, Route, Router, useNavigate, type RouteSectionProps } from "@solidjs/router";
 import { For, Match, onMount, Switch } from "solid-js";
 import { api, call, whenSignedOut } from "./api/client";
+import { IngredientsPage } from "./pages/IngredientsPage";
 import { MenuPage } from "./pages/MenuPage";
 import { OptionsPage } from "./pages/OptionsPage";
 import { PurchasesPage } from "./pages/PurchasesPage";
@@ -18,6 +19,7 @@ export function App() {
         <Route path="/" component={() => <Navigate href="/sales" />} />
         <Route path="/sales" component={SalesPage} />
         <Route path="/purchases" component={PurchasesPage} />
+        <Route path="/ingredients" component={IngredientsPage} />
         <Route path="/menu" component={MenuPage} />
         <Route path="/options" component={OptionsPage} />
         <Route path="/staff" component={StaffPage} />
@@ -77,6 +79,7 @@ function TopBar() {
       <nav class="nav" aria-label="Sections">
         <A href="/sales">Sales</A>
         <A href="/purchases">Purchases</A>
+        <A href="/ingredients">Ingredients</A>
         <A href="/menu">Menu</A>
         <A href="/options">Options</A>
         <A href="/staff">Staff</A>

@@ -112,6 +112,23 @@ func validPurchase(w http.ResponseWriter, in *api.PurchaseInput) bool {
 			invalid(w, field+".totalFils", "Enter an amount from 0.00 to 1,000,000.00.")
 			return false
 		}
+		if l.VatFils != nil && (*l.VatFils < 0 || *l.VatFils > l.TotalFils) {
+			invalid(w, field+".vatFils", "The VAT is part of the amount: from 0 up to it.")
+			return false
+		}
+		if l.ProductCode != nil {
+			code := strings.TrimSpace(*l.ProductCode)
+			if len([]rune(code)) > 40 {
+				invalid(w, field+".productCode", "Keep a code to 40 characters.")
+				return false
+			}
+			l.ProductCode = &code
+		}
+		if p := l.PackAmount; p != nil && (*p <= 0 || *p > 10_000_000 || math.IsNaN(*p) ||
+			math.Abs(*p*1000-math.Round(*p*1000)) > 1e-6) {
+			invalid(w, field+".packAmount", "Enter how much one holds, more than 0, with at most 3 decimals.")
+			return false
+		}
 	}
 	return true
 }
@@ -169,4 +186,23 @@ func (s *Server) ListProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) UpdateSupplier(w http.ResponseWriter, r *http.Request, id api.ID) {
+	var in api.SupplierInput
+	if !readJSON(w, r, &in) {
+		return
+	}
+	if in.QuietUntil != nil {
+		if _, err := time.Parse("2006-01-02", *in.QuietUntil); err != nil {
+			invalid(w, "quietUntil", "quietUntil is a date, YYYY-MM-DD.")
+			return
+		}
+	}
+	x, err := s.store.UpdateSupplier(r.Context(), user(r).OrgID, id, in)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, x)
 }

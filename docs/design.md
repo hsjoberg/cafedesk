@@ -305,6 +305,29 @@ before it is saved, not at the month's end.
   starts a supplier's new invoice from its previous lines, prices kept and
   quantities empty, so the week's work is the quantities.
 - No colors beyond the tokens; no chart: four areas read best as a table.
+- Each line starts with the supplier's item code, as the invoice does, then
+  the description. With "Prices are before 5% VAT", the columns read as the
+  invoice's: rate before VAT, amount with VAT; the total says how much is VAT.
+- The overdue invoice is the one warning that heads a page: paper, a chili
+  rule at its edge, its fact in bold, and its choices as buttons.
+
+### Ingredients
+
+**Who and why.** The owner, sorting what the shop buys into what recipes
+use, now and then: after a new product first appears on an invoice.
+
+**Layout.** The wall lists what needs doing first: **Not sorted yet**, the
+products that belong to no ingredient. Then the ingredients, each a tile-strip
+row with its price per kg, litre or piece set large, and its products under it
+in small type with their pack sizes. The editor takes either: a product
+(name, area, ingredient, how much one holds) or an ingredient (name, unit).
+
+- The pack size field takes "48 x 170" as typed off the label, and says
+  "= 8,160 g", with the price that makes at the product's last price.
+- Prices per unit are per kg, per litre or per piece, never per gram: 12.87
+  per kg reads; 0.01287 per g doesn't.
+- The editor's "New ingredient" sits inside the product's, so sorting a new
+  product is one save.
 
 ## Not designed yet
 

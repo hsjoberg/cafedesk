@@ -45,6 +45,22 @@ func TestDemoSales(t *testing.T) {
 	if err := st.SeedDemoPurchases(ctx, org, shop, owner.ID, 10, now, 1); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.SeedDemoIngredients(ctx, org); err != nil {
+		t.Fatal(err)
+	}
+	ingredients, err := st.ListIngredients(ctx, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	priced := 0
+	for _, x := range ingredients {
+		if x.UnitCostFils != nil && *x.UnitCostFils > 0 {
+			priced++
+		}
+	}
+	if len(ingredients) < 10 || priced < 10 {
+		t.Errorf("demo ingredients: %d, %d with a price", len(ingredients), priced)
+	}
 	from, to := time.Date(2026, 11, 7, 0, 0, 0, 0, time.UTC), time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
 	// Two Mondays, the 9th and the 16th, have wholesale invoices; the rest is
 	// a share of sales, as a cafeteria's would be.

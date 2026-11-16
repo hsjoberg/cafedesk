@@ -138,6 +138,27 @@ func (e TerminalStatus) Valid() bool {
 	}
 }
 
+// Defines values for Unit.
+const (
+	G     Unit = "g"
+	Ml    Unit = "ml"
+	Piece Unit = "piece"
+)
+
+// Valid indicates whether the value is a known member of the Unit enum.
+func (e Unit) Valid() bool {
+	switch e {
+	case G:
+		return true
+	case Ml:
+		return true
+	case Piece:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserRole.
 const (
 	UserRoleManager UserRole = "manager"
@@ -330,6 +351,31 @@ type HourSales struct {
 	GrossFils int64 `json:"grossFils"`
 	Hour      int   `json:"hour"`
 	Orders    int   `json:"orders"`
+}
+
+// Ingredient defines model for Ingredient.
+type Ingredient struct {
+	Id   openapi_types.UUID `json:"id"`
+	Name string             `json:"name"`
+
+	// PricedOn A date in the shop's own time, YYYY-MM-DD.
+	PricedOn *LocalDate `json:"pricedOn,omitempty"`
+
+	// Products How many products are this ingredient.
+	Products int  `json:"products"`
+	Unit     Unit `json:"unit"`
+
+	// UnitCostFils Fils per unit (per g, ml or piece), from the latest three purchase
+	// lines of its products that have a pack size, weighted by quantity.
+	// Missing until one is bought with a pack size known.
+	UnitCostFils *float64 `json:"unitCostFils,omitempty"`
+}
+
+// IngredientInput defines model for IngredientInput.
+type IngredientInput struct {
+	// Name What recipes call it, e.g. "Evaporated milk".
+	Name string `json:"name"`
+	Unit Unit   `json:"unit"`
 }
 
 // Item defines model for Item.
@@ -548,8 +594,17 @@ type PingStatus string
 type Product struct {
 	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
 	// packaging (cups, boxes, bags), or other.
-	Area Area               `json:"area"`
+	Area Area `json:"area"`
+
+	// Code The supplier's code for it, as on its invoices.
+	Code *string            `json:"code,omitempty"`
 	Id   openapi_types.UUID `json:"id"`
+
+	// IngredientId The ingredient it is, if it is one recipes use.
+	IngredientId *openapi_types.UUID `json:"ingredientId,omitempty"`
+
+	// LastCostEachFils What one cost in its latest purchase, as paid, VAT included.
+	LastCostEachFils *float64 `json:"lastCostEachFils,omitempty"`
 
 	// LastPurchasedOn A date in the shop's own time, YYYY-MM-DD.
 	LastPurchasedOn *LocalDate `json:"lastPurchasedOn,omitempty"`
@@ -562,6 +617,24 @@ type Product struct {
 
 	// Name As the invoice names it, e.g. "Rainbow evaporated milk, 48 x 170 g".
 	Name string `json:"name"`
+
+	// PackAmount How much of its ingredient one holds, in the ingredient's unit, e.g. 8160 (g).
+	PackAmount *float64 `json:"packAmount,omitempty"`
+}
+
+// ProductInput defines model for ProductInput.
+type ProductInput struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area Area `json:"area"`
+
+	// Code The supplier's code; empty for none.
+	Code         *string             `json:"code,omitempty"`
+	IngredientId *openapi_types.UUID `json:"ingredientId"`
+	Name         string              `json:"name"`
+
+	// PackAmount Up to 3 decimals; null when not known, or with no ingredient.
+	PackAmount *float64 `json:"packAmount"`
 }
 
 // Purchase defines model for Purchase.
@@ -570,15 +643,19 @@ type Purchase struct {
 	CreatedByName string    `json:"createdByName"`
 
 	// Date A date in the shop's own time, YYYY-MM-DD.
-	Date          LocalDate          `json:"date"`
-	Id            openapi_types.UUID `json:"id"`
-	Lines         []PurchaseLine     `json:"lines"`
-	Reference     string             `json:"reference"`
-	ShopId        openapi_types.UUID `json:"shopId"`
-	Supplier      *Supplier          `json:"supplier,omitempty"`
-	TotalFils     int64              `json:"totalFils"`
-	UpdatedAt     *time.Time         `json:"updatedAt,omitempty"`
-	UpdatedByName *string            `json:"updatedByName,omitempty"`
+	Date            LocalDate          `json:"date"`
+	Id              openapi_types.UUID `json:"id"`
+	Lines           []PurchaseLine     `json:"lines"`
+	PricesBeforeVat bool               `json:"pricesBeforeVat"`
+	Reference       string             `json:"reference"`
+	ShopId          openapi_types.UUID `json:"shopId"`
+	Supplier        *Supplier          `json:"supplier,omitempty"`
+	TotalFils       int64              `json:"totalFils"`
+	UpdatedAt       *time.Time         `json:"updatedAt,omitempty"`
+	UpdatedByName   *string            `json:"updatedByName,omitempty"`
+
+	// VatFils The VAT in totalFils.
+	VatFils int64 `json:"vatFils"`
 }
 
 // PurchaseInput defines model for PurchaseInput.
@@ -586,6 +663,10 @@ type PurchaseInput struct {
 	// Date A date in the shop's own time, YYYY-MM-DD.
 	Date  LocalDate           `json:"date"`
 	Lines []PurchaseLineInput `json:"lines"`
+
+	// PricesBeforeVat The unit prices are before VAT, as a wholesaler's invoice has them;
+	// each line's total is what was paid, VAT included.
+	PricesBeforeVat *bool `json:"pricesBeforeVat,omitempty"`
 
 	// Reference The invoice or receipt number.
 	Reference  *string             `json:"reference,omitempty"`
@@ -601,11 +682,13 @@ type PurchaseLine struct {
 	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
 	// packaging (cups, boxes, bags), or other.
 	Area          Area               `json:"area"`
+	ProductCode   *string            `json:"productCode,omitempty"`
 	ProductId     openapi_types.UUID `json:"productId"`
 	ProductName   string             `json:"productName"`
 	Quantity      float64            `json:"quantity"`
 	TotalFils     int64              `json:"totalFils"`
 	UnitPriceFils int64              `json:"unitPriceFils"`
+	VatFils       int64              `json:"vatFils"`
 }
 
 // PurchaseLineInput defines model for PurchaseLineInput.
@@ -613,6 +696,17 @@ type PurchaseLineInput struct {
 	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
 	// packaging (cups, boxes, bags), or other.
 	Area Area `json:"area"`
+
+	// IngredientId The ingredient the product is, with packAmount: taken only if the
+	// product belongs to no ingredient yet, as a new one doesn't.
+	IngredientId *openapi_types.UUID `json:"ingredientId,omitempty"`
+
+	// PackAmount How much of the ingredient one holds, in its unit.
+	PackAmount *float64 `json:"packAmount,omitempty"`
+
+	// ProductCode The supplier's code for the product. A known code names its
+	// product before the name does; a new product keeps it.
+	ProductCode *string `json:"productCode,omitempty"`
 
 	// ProductId A known product; or leave it out and give productName.
 	ProductId *openapi_types.UUID `json:"productId,omitempty"`
@@ -626,6 +720,9 @@ type PurchaseLineInput struct {
 	// TotalFils The line's amount, as the invoice has it.
 	TotalFils     int64 `json:"totalFils"`
 	UnitPriceFils int64 `json:"unitPriceFils"`
+
+	// VatFils The VAT in totalFils, when the prices were before VAT.
+	VatFils *int64 `json:"vatFils,omitempty"`
 }
 
 // PurchaseList defines model for PurchaseList.
@@ -791,8 +888,28 @@ type StaffSales struct {
 
 // Supplier defines model for Supplier.
 type Supplier struct {
-	Id   openapi_types.UUID `json:"id"`
-	Name string             `json:"name"`
+	Id openapi_types.UUID `json:"id"`
+
+	// LastPurchasedOn A date in the shop's own time, YYYY-MM-DD.
+	LastPurchasedOn *LocalDate `json:"lastPurchasedOn,omitempty"`
+	Name            string     `json:"name"`
+
+	// QuietUntil A date in the shop's own time, YYYY-MM-DD.
+	QuietUntil *LocalDate `json:"quietUntil,omitempty"`
+
+	// UsualDays How many days apart its purchases usually are: the median gap of
+	// its last six purchase dates. Missing until it has two.
+	UsualDays *int `json:"usualDays,omitempty"`
+	Watched   bool `json:"watched"`
+}
+
+// SupplierInput defines model for SupplierInput.
+type SupplierInput struct {
+	// QuietUntil No warning through this date, YYYY-MM-DD; null for none.
+	QuietUntil *string `json:"quietUntil"`
+
+	// Watched Warn when its invoice is overdue. Off for an occasional supplier.
+	Watched bool `json:"watched"`
 }
 
 // SyncCategory defines model for SyncCategory.
@@ -903,6 +1020,9 @@ type TillSales struct {
 	TerminalId  openapi_types.UUID `json:"terminalId"`
 }
 
+// Unit defines model for Unit.
+type Unit string
+
 // User defines model for User.
 type User struct {
 	Email string             `json:"email"`
@@ -949,6 +1069,12 @@ type UpdateCategoryJSONRequestBody = CategoryInput
 // MoveCategoryJSONRequestBody defines body for MoveCategory for application/json ContentType.
 type MoveCategoryJSONRequestBody = Move
 
+// CreateIngredientJSONRequestBody defines body for CreateIngredient for application/json ContentType.
+type CreateIngredientJSONRequestBody = IngredientInput
+
+// UpdateIngredientJSONRequestBody defines body for UpdateIngredient for application/json ContentType.
+type UpdateIngredientJSONRequestBody = IngredientInput
+
 // CreateItemJSONRequestBody defines body for CreateItem for application/json ContentType.
 type CreateItemJSONRequestBody = ItemInput
 
@@ -967,6 +1093,9 @@ type UpdateModifierGroupJSONRequestBody = ModifierGroupInput
 // MoveModifierGroupJSONRequestBody defines body for MoveModifierGroup for application/json ContentType.
 type MoveModifierGroupJSONRequestBody = Move
 
+// UpdateProductJSONRequestBody defines body for UpdateProduct for application/json ContentType.
+type UpdateProductJSONRequestBody = ProductInput
+
 // CreatePurchaseJSONRequestBody defines body for CreatePurchase for application/json ContentType.
 type CreatePurchaseJSONRequestBody = PurchaseInput
 
@@ -981,6 +1110,9 @@ type CreateStaffJSONRequestBody = StaffInput
 
 // UpdateStaffJSONRequestBody defines body for UpdateStaff for application/json ContentType.
 type UpdateStaffJSONRequestBody = StaffInput
+
+// UpdateSupplierJSONRequestBody defines body for UpdateSupplier for application/json ContentType.
+type UpdateSupplierJSONRequestBody = SupplierInput
 
 // CreateTerminalJSONRequestBody defines body for CreateTerminal for application/json ContentType.
 type CreateTerminalJSONRequestBody = TerminalInput
@@ -1011,6 +1143,18 @@ type ServerInterface interface {
 
 	// (POST /v1/admin/categories/{id}/move)
 	MoveCategory(w http.ResponseWriter, r *http.Request, id ID)
+	// ListIngredients What recipes use, by name, each with its price per unit from recent purchases.
+	// (GET /v1/admin/ingredients)
+	ListIngredients(w http.ResponseWriter, r *http.Request)
+	// CreateIngredient Adds an ingredient.
+	// (POST /v1/admin/ingredients)
+	CreateIngredient(w http.ResponseWriter, r *http.Request)
+	// DeleteIngredient Deletes an ingredient. Its products stay, belonging to none.
+	// (DELETE /v1/admin/ingredients/{id})
+	DeleteIngredient(w http.ResponseWriter, r *http.Request, id ID)
+	// UpdateIngredient Saves an ingredient's name and unit.
+	// (PUT /v1/admin/ingredients/{id})
+	UpdateIngredient(w http.ResponseWriter, r *http.Request, id ID)
 
 	// (POST /v1/admin/items)
 	CreateItem(w http.ResponseWriter, r *http.Request)
@@ -1041,6 +1185,9 @@ type ServerInterface interface {
 	// ListProducts What the organization buys, by name, with what its latest purchase paid.
 	// (GET /v1/admin/products)
 	ListProducts(w http.ResponseWriter, r *http.Request)
+	// UpdateProduct Saves a product's name, area, ingredient and pack size.
+	// (PUT /v1/admin/products/{id})
+	UpdateProduct(w http.ResponseWriter, r *http.Request, id ID)
 	// ListPurchases The purchases between two dates, both included, at most 366 days
 	// apart, latest first, with what was bought per area against that
 	// area's sales.
@@ -1078,6 +1225,9 @@ type ServerInterface interface {
 	// ListSuppliers The organization's suppliers, by name.
 	// (GET /v1/admin/suppliers)
 	ListSuppliers(w http.ResponseWriter, r *http.Request)
+	// UpdateSupplier Whether a supplier's overdue invoices are warned of, and if it is quiet until a date.
+	// (PUT /v1/admin/suppliers/{id})
+	UpdateSupplier(w http.ResponseWriter, r *http.Request, id ID)
 	// ListTerminals The tills of the organization's shops.
 	// (GET /v1/admin/terminals)
 	ListTerminals(w http.ResponseWriter, r *http.Request)
@@ -1224,6 +1374,86 @@ func (siw *ServerInterfaceWrapper) MoveCategory(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.MoveCategory(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListIngredients operation middleware
+func (siw *ServerInterfaceWrapper) ListIngredients(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListIngredients(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateIngredient operation middleware
+func (siw *ServerInterfaceWrapper) CreateIngredient(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateIngredient(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteIngredient operation middleware
+func (siw *ServerInterfaceWrapper) DeleteIngredient(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteIngredient(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateIngredient operation middleware
+func (siw *ServerInterfaceWrapper) UpdateIngredient(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateIngredient(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1436,6 +1666,32 @@ func (siw *ServerInterfaceWrapper) ListProducts(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListProducts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateProduct operation middleware
+func (siw *ServerInterfaceWrapper) UpdateProduct(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateProduct(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1716,6 +1972,32 @@ func (siw *ServerInterfaceWrapper) ListSuppliers(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListSuppliers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSupplier operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSupplier(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSupplier(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2031,7 +2313,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/purchases/{id}", wrapper.DeletePurchase)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/purchases/{id}", wrapper.UpdatePurchase)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/suppliers", wrapper.ListSuppliers)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/suppliers/{id}", wrapper.UpdateSupplier)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/products", wrapper.ListProducts)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/products/{id}", wrapper.UpdateProduct)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/ingredients", wrapper.ListIngredients)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/ingredients", wrapper.CreateIngredient)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/ingredients/{id}", wrapper.DeleteIngredient)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/ingredients/{id}", wrapper.UpdateIngredient)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/terminal/pair", wrapper.PairTerminal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/terminal/changes", wrapper.GetChanges)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/terminal/events", wrapper.SendEvents)

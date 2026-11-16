@@ -229,7 +229,8 @@ that exists:
 ### Phase 3: Costs and margins (about 2 weeks)
 **Status (2026-11-16):** step 1 is done: a cost per item and per option, kept
 as a history so a change never rewrites past profit, and profit on the Sales
-page. Step 2.1, purchases, is done too. Next: products and ingredients.
+page. Steps 2.1, purchases, and 2.2, products and ingredients, are done
+too. Next: recipes and the chef's batch.
 See [docs/phase3.md](docs/phase3.md).
 
 1. Simple: one manual cost per item, giving margin per item.
@@ -286,7 +287,8 @@ everything: sales, less ingredients, less expenses. Deferred, not dropped.
   - A Telegram bot, its token and the chat to post to as server settings.
   - From the server: a till silent for 24 hours, a nightly backup that failed
     (the `backups` table already records each one), a cash count short by more
-    than a set amount.
+    than a set amount, and a supplier's invoice overdue (the admin already
+    warns of it: Phase 3, step 2.1).
   - The server being down can't be reported by the server: an outside check
     such as UptimeRobot or Healthchecks.io watching `/healthz`, which can post
     to Telegram itself.

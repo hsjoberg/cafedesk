@@ -5,23 +5,22 @@ import {
   api,
   call,
   type Area,
+  type Ingredient,
   type Product,
   type Purchase,
   type PurchaseInput,
   type PurchaseList,
   type Supplier,
+  type Unit,
 } from "../api/client";
+import { areas, unitOf, units } from "../areas";
+import { OverdueInvoices } from "../components/Overdue";
+import { guessIngredient, guessIngredientName, guessPack, packFor, parsePack } from "../guess";
 import { addDays, isDate, purchasePresets, rangeLabel, shortDate, todayIn } from "../dates";
 import { formatAmount, formatFils, formatQuantity, parseAmount, parseQuantity } from "../money";
 import { me } from "../state";
 import { DeleteButton, EditorHead, fieldError, FormError, toSaveError, type SaveError } from "../ui";
 
-const areas: { id: Area; label: string; sales?: string }[] = [
-  { id: "counter", label: "Counter", sales: "counter sales" },
-  { id: "kitchen", label: "Kitchen", sales: "kitchen sales" },
-  { id: "packaging", label: "Packaging" },
-  { id: "other", label: "Other" },
-];
 const share = (part: number, whole: number) => {
   if (whole <= 0) return "";
   const pct = Math.round((part / whole) * 100);
@@ -34,6 +33,8 @@ const when = (iso: string) =>
 
 type LineDraft = {
   productId?: string;
+  /** The supplier's code for the product, as on the invoice. */
+  code: string;
   product: string;
   area: Area;
   qty: string;
@@ -41,10 +42,33 @@ type LineDraft = {
   amount: string;
   /** Typed by hand, so quantity and price no longer set it. */
   amountTyped: boolean;
+  /** For a new product: the ingredient it is ("" for none or later, or NEW), and how much one holds. */
+  sortTo: string;
+  pack: string;
+  newName: string;
+  newUnit: Unit;
+  /** Chosen by hand, so the product's name no longer suggests them. */
+  sortTouched: boolean;
 };
-type Draft = { date: string; shopId: string; supplier: string; reference: string; lines: LineDraft[]; check: string };
+const NEW = "new";
+const unsorted = { sortTo: "", pack: "", newName: "", newUnit: "g" as Unit, sortTouched: false };
+type Draft = {
+  date: string;
+  shopId: string;
+  supplier: string;
+  reference: string;
+  lines: LineDraft[];
+  check: string;
+  /** Prices are before VAT, as on a wholesale invoice; amounts include it. */
+  beforeVat: boolean;
+  /** Start warning when the supplier's invoice is overdue. */
+  watch: boolean;
+};
+/** The UAE's VAT, added to prices before VAT. */
+const VAT = 0.05;
 
-const blankLine = (): LineDraft => ({ product: "", area: "counter", qty: "", price: "", amount: "", amountTyped: false });
+const blankLine = (): LineDraft => ({ code: "", product: "", area: "counter", qty: "", price: "", amount: "", amountTyped: false,
+  ...unsorted });
 
 /** Purchases: what was bought, and where the money went. */
 export function PurchasesPage() {
@@ -86,11 +110,14 @@ export function PurchasesPage() {
 
   const [products, setProducts] = createSignal<Product[]>([]);
   const [suppliers, setSuppliers] = createSignal<Supplier[]>([]);
+  const [ingredients, setIngredients] = createSignal<Ingredient[]>([]);
   const loadNames = async () => {
     try {
-      const [p, s] = await Promise.all([call(api.GET("/v1/admin/products")), call(api.GET("/v1/admin/suppliers"))]);
+      const [p, s, i] = await Promise.all([call(api.GET("/v1/admin/products")), call(api.GET("/v1/admin/suppliers")),
+        call(api.GET("/v1/admin/ingredients"))]);
       setProducts(p);
       setSuppliers(s);
+      setIngredients(i);
     } catch {
       // Only for suggestions; typing still works.
     }
@@ -101,10 +128,12 @@ export function PurchasesPage() {
 
   // The editor.
   const [editing, setEditing] = createSignal<string | null | undefined>(undefined); // null: new
-  const [d, setD] = createStore<Draft>({ date: "", shopId: "", supplier: "", reference: "", lines: [], check: "" });
+  const [d, setD] = createStore<Draft>({ date: "", shopId: "", supplier: "", reference: "", lines: [], check: "", beforeVat: false, watch: false });
   const [error, setError] = createSignal<SaveError>();
   const [status, setStatus] = createSignal("");
   const [busy, setBusy] = createSignal(false);
+  /** Counts saves and deletes, so the overdue warning looks again. */
+  const [saves, setSaves] = createSignal(0);
   const edited = () => list()?.purchases.find((p) => p.id === editing());
 
   const open = (p: Purchase | null) => {
@@ -118,29 +147,57 @@ export function PurchasesPage() {
             supplier: p.supplier?.name ?? "",
             reference: p.reference,
             check: "",
+            beforeVat: p.pricesBeforeVat,
+            watch: false,
             lines: p.lines.map((l) => ({
               productId: l.productId,
+              code: l.productCode ?? "",
               product: l.productName,
               area: l.area,
               qty: formatQuantity(l.quantity),
               price: formatFils(l.unitPriceFils),
               amount: formatFils(l.totalFils),
-              amountTyped: l.totalFils !== Math.round(l.quantity * l.unitPriceFils),
+              amountTyped: l.totalFils !== Math.round(l.quantity * l.unitPriceFils * (p.pricesBeforeVat ? 1 + VAT : 1)),
+              ...unsorted,
             })),
           }
         : { date: today(), shopId: shop()?.id ?? shops()[0]?.id ?? "", supplier: "", reference: "", check: "",
-            lines: [blankLine()] },
+            beforeVat: false, watch: false, lines: [blankLine()] },
     );
     setEditing(p?.id ?? null);
   };
 
-  // Quantity times price, unless the amount was typed.
+  // Quantity times price, with VAT when the prices are before it, unless
+  // the amount was typed.
   const reprice = (i: number) => {
     const l = d.lines[i];
     if (!l || l.amountTyped) return;
     const q = parseQuantity(l.qty);
     const p = money(l.price);
-    setD("lines", i, "amount", q !== null && p !== null ? formatFils(Math.round(q * p)) : "");
+    setD("lines", i, "amount", q !== null && p !== null ? formatFils(Math.round(q * p * (d.beforeVat ? 1 + VAT : 1))) : "");
+  };
+  const setBeforeVat = (on: boolean) => {
+    setD("beforeVat", on);
+    d.lines.forEach((_, i) => reprice(i));
+  };
+  /** The VAT in a line's amount: what it is over quantity times price. */
+  const lineVat = (l: LineDraft) => {
+    if (!d.beforeVat) return 0;
+    const q = parseQuantity(l.qty);
+    const p = money(l.price);
+    const amount = money(l.amount);
+    if (q === null || p === null || amount === null) return 0;
+    return Math.max(0, amount - Math.round(q * p));
+  };
+  const productCoded = (code: string) => {
+    const c = code.trim();
+    return c ? products().find((p) => p.code === c) : undefined;
+  };
+  // A known code fills in its product.
+  const setCode = (i: number, code: string) => {
+    const known = productCoded(code);
+    setD("lines", i, "code", code);
+    if (known) setProduct(i, known.name);
   };
   const setProduct = (i: number, name: string) => {
     const known = productNamed(name);
@@ -150,14 +207,47 @@ export function PurchasesPage() {
       l.productId = known?.id;
       if (known) {
         l.area = known.area;
+        if (!l.code && known.code) l.code = known.code;
         if (!l.price && known.lastUnitPriceFils != null) l.price = formatFils(known.lastUnitPriceFils);
+      } else if (!l.sortTouched) {
+        // What the name suggests, for a person to check.
+        const ing = guessIngredient(name, ingredients());
+        const size = guessPack(name);
+        l.sortTo = ing?.id ?? "";
+        l.pack = String(packFor(name, ing?.unit) ?? "");
+        const sibling = ing && products().find((p) => p.ingredientId === ing.id);
+        if (sibling) l.area = sibling.area;
+        l.newName = guessIngredientName(name);
+        l.newUnit = size?.unit ?? "g";
       }
     }));
     reprice(i);
   };
+  const isNew = (l: LineDraft) => l.product.trim() !== "" && !productNamed(l.product);
+  const lineUnit = (l: LineDraft): Unit | undefined =>
+    l.sortTo === NEW ? l.newUnit : ingredients().find((x) => x.id === l.sortTo)?.unit;
+  const setSortTo = (i: number, to: string) =>
+    setD(produce((x) => {
+      const l = x.lines[i]!;
+      l.sortTo = to;
+      l.sortTouched = true;
+      const unit = to === NEW ? l.newUnit : ingredients().find((y) => y.id === to)?.unit;
+      l.pack = String(packFor(l.product, unit) ?? "");
+      // The area its ingredient's other products go to.
+      const sibling = products().find((p) => p.ingredientId === to);
+      if (sibling) l.area = sibling.area;
+    }));
+  const packHint = (l: LineDraft) => {
+    const unit = lineUnit(l);
+    if (!unit) return "";
+    if (!l.pack.trim()) return `How much one holds, in ${unitOf(unit).label.toLowerCase()}, as 48 x 170. Or leave it for later.`;
+    const n = parsePack(l.pack);
+    return n === null ? "Type a number, or one like 48 x 170." : `= ${new Intl.NumberFormat("en").format(n)} ${unitOf(unit).short}`;
+  };
 
   const lineTotal = (l: LineDraft) => money(l.amount) ?? 0;
   const total = createMemo(() => d.lines.reduce((s, l) => s + lineTotal(l), 0));
+  const totalVat = createMemo(() => d.lines.reduce((s, l) => s + lineVat(l), 0));
   const check = () => {
     if (!d.check.trim()) return null;
     const c = money(d.check);
@@ -180,7 +270,10 @@ export function PurchasesPage() {
         if (id !== null || !sid) return;
         try {
           const r = await call(api.GET("/v1/admin/purchases", { params: { query: { from: addDays(today(), -365), to: today() } } }));
-          setLastOf(r.purchases.find((p) => p.supplier?.id === sid));
+          const last = r.purchases.find((p) => p.supplier?.id === sid);
+          setLastOf(last);
+          // A supplier's invoices are alike: before VAT if its last was.
+          if (last && blankDraft()) setBeforeVat(last.pricesBeforeVat);
         } catch {
           // Only a shortcut.
         }
@@ -190,9 +283,10 @@ export function PurchasesPage() {
   const copyLast = () => {
     const p = lastOf();
     if (!p) return;
+    setD("beforeVat", p.pricesBeforeVat);
     setD("lines", p.lines.map((l) => ({
-      productId: l.productId, product: l.productName, area: l.area, qty: "", price: formatFils(l.unitPriceFils),
-      amount: "", amountTyped: false,
+      productId: l.productId, code: l.productCode ?? "", product: l.productName, area: l.area, qty: "",
+      price: formatFils(l.unitPriceFils), amount: "", amountTyped: false, ...unsorted,
     })));
   };
   const blankDraft = () => d.lines.every((l) => !l.product && !l.qty && !l.amount);
@@ -205,6 +299,28 @@ export function PurchasesPage() {
       // Empty lines go, so the rest keep the places errors name.
       const kept = d.lines.filter((l) => l.product.trim() || l.qty.trim() || l.amount.trim());
       if (kept.length !== d.lines.length) setD("lines", kept.length ? kept : [blankLine()]);
+      // New ingredients first, one per name, so lines can name them.
+      const made = new Map<string, string>();
+      for (const [i, l] of kept.entries()) {
+        if (!isNew(l) || l.sortTo !== NEW) continue;
+        const name = l.newName.trim();
+        if (!name) throw { field: `lines.${i}.newName`, message: "Name the new ingredient, as Basmati rice." };
+        const key = name.toLowerCase();
+        if (made.has(key)) continue;
+        const known = ingredients().find((x) => x.name.toLowerCase() === key);
+        if (known) {
+          made.set(key, known.id);
+          continue;
+        }
+        try {
+          const x = await call(api.POST("/v1/admin/ingredients", { body: { name, unit: l.newUnit } }));
+          made.set(key, x.id);
+          // Known from now on, so a retry after a refused save reuses it.
+          setIngredients((list) => [...list, x]);
+        } catch (e) {
+          throw { field: `lines.${i}.newName`, message: (e as Error).message };
+        }
+      }
       const lines = kept.map((l, i) => {
           const f = `lines.${i}`;
           const quantity = parseQuantity(l.qty);
@@ -214,7 +330,19 @@ export function PurchasesPage() {
           const totalFils = money(l.amount);
           if (totalFils === null) throw { field: `${f}.totalFils`, message: "Enter the amount, like 210.00." };
           const known = l.productId && productNamed(l.product)?.id === l.productId ? l.productId : undefined;
-          return { productId: known, productName: known ? undefined : l.product, area: l.area, quantity, unitPriceFils, totalFils };
+          let ingredientId: string | undefined;
+          let packAmount: number | undefined;
+          if (isNew(l) && l.sortTo) {
+            ingredientId = l.sortTo === NEW ? made.get(l.newName.trim().toLowerCase()) : l.sortTo;
+            if (l.pack.trim()) {
+              const n = parsePack(l.pack);
+              if (n === null) throw { field: `${f}.packAmount`, message: "Type how much one holds, as 10000 or 48 x 170." };
+              packAmount = n;
+            }
+          }
+          return { productId: known, productName: known ? undefined : l.product, productCode: l.code.trim() || undefined,
+            area: l.area, quantity, unitPriceFils, totalFils, vatFils: d.beforeVat ? lineVat(l) : undefined,
+            ingredientId, packAmount };
         });
       const supplier = supplierNamed(d.supplier);
       const body: PurchaseInput = {
@@ -223,13 +351,19 @@ export function PurchasesPage() {
         supplierId: supplier?.id,
         supplierName: supplier ? undefined : d.supplier.trim() || undefined,
         reference: d.reference,
+        pricesBeforeVat: d.beforeVat,
         lines,
       };
       const id = editing();
       const saved = id
         ? await call(api.PUT("/v1/admin/purchases/{id}", { params: { path: { id } }, body }))
         : await call(api.POST("/v1/admin/purchases", { body }));
+      if (supplier && !supplier.watched && d.watch) {
+        await call(api.PUT("/v1/admin/suppliers/{id}", { params: { path: { id: supplier.id } },
+          body: { watched: true, quietUntil: null } }));
+      }
       await Promise.all([load(), loadNames()]);
+      setSaves((n) => n + 1);
       setEditing(saved.id);
       open(saved);
       setStatus(id ? "Saved." : "Purchase recorded.");
@@ -243,6 +377,7 @@ export function PurchasesPage() {
     setBusy(true);
     try {
       await call(api.DELETE("/v1/admin/purchases/{id}", { params: { path: { id } } }));
+      setSaves((n) => n + 1);
       setEditing(undefined);
       await load();
     } catch (e) {
@@ -264,6 +399,10 @@ export function PurchasesPage() {
             Add a purchase
           </button>
         </div>
+        <OverdueInvoices refresh={saves()} onAdd={(name) => {
+          open(null);
+          setD("supplier", name);
+        }} />
         <div class="filters" role="group" aria-label="Dates">
           <For each={purchasePresets}>
             {(p) => (
@@ -418,6 +557,16 @@ export function PurchasesPage() {
           <datalist id="suppliers">
             <For each={suppliers()}>{(s) => <option value={s.name} />}</For>
           </datalist>
+          <Show when={supplierNamed(d.supplier) && !supplierNamed(d.supplier)!.watched}>
+            <label class="check">
+              <input type="checkbox" checked={d.watch} onChange={(e) => setD("watch", e.currentTarget.checked)} />
+              <span>Warn me when an invoice from {supplierNamed(d.supplier)!.name} is overdue</span>
+            </label>
+          </Show>
+          <label class="check">
+            <input type="checkbox" checked={d.beforeVat} onChange={(e) => setBeforeVat(e.currentTarget.checked)} />
+            <span>Prices are before 5% VAT, as on a wholesale invoice</span>
+          </label>
           <Show when={lastOf() && blankDraft()}>
             <button type="button" class="btn btn-option copy" onClick={copyLast}>
               Copy the lines of the last invoice, {shortDate(lastOf()!.date)}
@@ -429,12 +578,20 @@ export function PurchasesPage() {
             <Index each={d.lines}>
               {(l, i) => (
                 <div class="mod line">
-                  <label class="field">
-                    <span class="visually-hidden">Product</span>
-                    <input class="input" list="products" placeholder="Product, as on the invoice" value={l().product}
-                      onInput={(e) => setProduct(i, e.currentTarget.value)}
-                      aria-invalid={fieldError(error(), `lines.${i}.productName`) ? "true" : undefined} />
-                  </label>
+                  <div class="line-head">
+                    <label class="field">
+                      <span class="visually-hidden">Item code</span>
+                      <input class="input" list="codes" placeholder="Code" value={l().code}
+                        onInput={(e) => setCode(i, e.currentTarget.value)}
+                        aria-invalid={fieldError(error(), `lines.${i}.productCode`) ? "true" : undefined} />
+                    </label>
+                    <label class="field">
+                      <span class="visually-hidden">Product</span>
+                      <input class="input" list="products" placeholder="Product, as on the invoice" value={l().product}
+                        onInput={(e) => setProduct(i, e.currentTarget.value)}
+                        aria-invalid={fieldError(error(), `lines.${i}.productName`) ? "true" : undefined} />
+                    </label>
+                  </div>
                   <Show when={fieldError(error(), `lines.${i}.productName`)}>
                     <span class="error">{fieldError(error(), `lines.${i}.productName`)}</span>
                   </Show>
@@ -446,13 +603,13 @@ export function PurchasesPage() {
                         aria-invalid={fieldError(error(), `lines.${i}.quantity`) ? "true" : undefined} />
                     </label>
                     <label class="field">
-                      <span>Price each</span>
+                      <span>{d.beforeVat ? "Rate, before VAT" : "Price each"}</span>
                       <input class="input" inputmode="decimal" value={l().price}
                         onInput={(e) => { setD("lines", i, "price", e.currentTarget.value); reprice(i); }}
                         aria-invalid={fieldError(error(), `lines.${i}.unitPriceFils`) ? "true" : undefined} />
                     </label>
                     <label class="field">
-                      <span>Amount</span>
+                      <span>{d.beforeVat ? "With VAT" : "Amount"}</span>
                       <input class="input" inputmode="decimal" value={l().amount}
                         onInput={(e) => {
                           const v = e.currentTarget.value;
@@ -462,7 +619,47 @@ export function PurchasesPage() {
                         aria-invalid={fieldError(error(), `lines.${i}.totalFils`) ? "true" : undefined} />
                     </label>
                   </div>
-                  <For each={["quantity", "unitPriceFils", "totalFils"]}>
+                  <Show when={isNew(l())}>
+                    <div class="sort-row">
+                      <label class="field">
+                        <span>New product. Which ingredient is it?</span>
+                        <select class="input" value={l().sortTo} onChange={(e) => setSortTo(i, e.currentTarget.value)}>
+                          <option value="">None, or sort it later</option>
+                          <For each={ingredients()}>{(x) => <option value={x.id}>{x.name}</option>}</For>
+                          <option value={NEW}>A new ingredient…</option>
+                        </select>
+                      </label>
+                      <Show when={l().sortTo === NEW}>
+                        <div class="mod-row">
+                          <label class="field">
+                            <span>Its name</span>
+                            <input class="input" value={l().newName}
+                              onInput={(e) => setD("lines", i, "newName", e.currentTarget.value)}
+                              aria-invalid={fieldError(error(), `lines.${i}.newName`) ? "true" : undefined} />
+                          </label>
+                          <label class="field">
+                            <span>Measured in</span>
+                            <select class="input" value={l().newUnit} onChange={(e) => {
+                              setD("lines", i, "newUnit", e.currentTarget.value as Unit);
+                              setSortTo(i, NEW);
+                            }}>
+                              <For each={units}>{(u) => <option value={u.id}>{u.label}</option>}</For>
+                            </select>
+                          </label>
+                        </div>
+                      </Show>
+                      <Show when={lineUnit(l())}>
+                        <label class="field">
+                          <span>One holds ({unitOf(lineUnit(l())!).short})</span>
+                          <input class="input" inputmode="decimal" value={l().pack}
+                            onInput={(e) => setD("lines", i, "pack", e.currentTarget.value)}
+                            aria-invalid={fieldError(error(), `lines.${i}.packAmount`) ? "true" : undefined} />
+                          <span class="meta">{packHint(l())}</span>
+                        </label>
+                      </Show>
+                    </div>
+                  </Show>
+                  <For each={["productCode", "quantity", "unitPriceFils", "totalFils", "vatFils", "newName", "packAmount"]}>
                     {(f) => (
                       <Show when={fieldError(error(), `lines.${i}.${f}`)}>
                         <span class="error">{fieldError(error(), `lines.${i}.${f}`)}</span>
@@ -488,6 +685,9 @@ export function PurchasesPage() {
             <datalist id="products">
               <For each={products()}>{(p) => <option value={p.name} />}</For>
             </datalist>
+            <datalist id="codes">
+              <For each={products().filter((p) => p.code)}>{(p) => <option value={p.code!}>{p.name}</option>}</For>
+            </datalist>
             <button type="button" class="btn btn-option" onClick={() => setD("lines", (ls) => [...ls, blankLine()])}>
               Add a line
             </button>
@@ -495,9 +695,12 @@ export function PurchasesPage() {
 
           <div class="invoice-foot">
             <div class="invoice-total">
-              <span>Total</span>
+              <span>Total{d.beforeVat ? ", with VAT" : ""}</span>
               <strong class="num">{formatAmount(total())}</strong>
             </div>
+            <Show when={d.beforeVat}>
+              <p class="meta vat-line">Of which VAT, {formatAmount(totalVat())}</p>
+            </Show>
             <label class="field">
               <span>The invoice's own total, to check (optional)</span>
               <input class="input" inputmode="decimal" value={d.check} onInput={(e) => setD("check", e.currentTarget.value)} />

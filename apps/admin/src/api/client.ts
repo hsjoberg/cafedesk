@@ -24,6 +24,8 @@ export type Supplier = Schemas["Supplier"];
 export type Purchase = Schemas["Purchase"];
 export type PurchaseInput = Schemas["PurchaseInput"];
 export type PurchaseList = Schemas["PurchaseList"];
+export type Ingredient = Schemas["Ingredient"];
+export type Unit = Schemas["Unit"];
 
 // Same origin: the server serves the admin, and Vite passes /v1 to it in
 // development.

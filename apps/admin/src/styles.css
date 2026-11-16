@@ -1000,6 +1000,133 @@ fieldset.bare {
   margin: 0;
 }
 
+/* A new product sorted as it is bought. */
+.sort-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-top: 2px;
+  background: var(--tile);
+  border-radius: 4px;
+}
+.sort-row .field > span:first-child {
+  font-size: 13px;
+}
+.sort-row .input {
+  min-height: 44px;
+  font-size: var(--fs-body);
+}
+
+/* Something missing that every figure depends on: a wholesale invoice. */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  background: var(--paper);
+  border-left: 4px solid var(--chili);
+  border-radius: 4px;
+}
+.notice p {
+  margin: 0;
+  flex: 1 1 320px;
+  max-width: 70ch;
+}
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* A purchase line: the supplier's code, then the product. */
+.line-head {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 6px;
+}
+.invoice-foot .vat-line {
+  margin: -6px 0 0;
+  text-align: right;
+}
+
+/* Ingredients. */
+
+.ingredients .unsorted {
+  margin-bottom: 16px;
+  box-shadow: inset 4px 0 0 var(--ink);
+}
+.ingredient-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.ingredient {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 6px;
+  background: var(--tile);
+  border-radius: 4px;
+}
+.ingredient.on {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+.ingredient-head {
+  display: grid;
+  gap: 2px;
+  padding: 10px 10px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.ingredient-head:hover,
+.product-row:hover {
+  background: var(--tile-pressed);
+}
+.ingredient-head strong {
+  font-size: var(--fs-item);
+  font-weight: 500;
+}
+.ingredient-head .price {
+  font-size: var(--fs-price);
+  font-weight: 500;
+}
+.product-list {
+  display: grid;
+  gap: 2px;
+}
+.ingredient .product-list > .meta {
+  padding: 0 10px 8px;
+}
+.product-row {
+  display: grid;
+  gap: 1px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.product-row[aria-pressed="true"] {
+  background: var(--paper);
+}
+.unsorted .product-list {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.unsorted .product-row {
+  background: var(--paper);
+  font-size: var(--fs-body);
+}
+.unsorted .product-row[aria-pressed="true"] {
+  outline: 3px solid var(--ink);
+}
+
 /* The sign-in page. */
 
 .signin {
