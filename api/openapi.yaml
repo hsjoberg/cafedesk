@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.9.0
+  version: 0.11.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
 
@@ -469,6 +469,40 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /v1/admin/reports/usage:
+    get:
+      operationId: getUsage
+      summary: |
+        Each ingredient, between two dates: what was bought, and what sales
+        used by today's recipes. Sales count on their business day;
+        purchases on their date.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/LocalDate"
+        - name: to
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/LocalDate"
+        - name: shopId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The usage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usage"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /v1/admin/purchases:
     get:
       operationId: listPurchases
@@ -695,6 +729,120 @@ paths:
         "204":
           description: Deleted.
         "404":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/recipes:
+    get:
+      operationId: getRecipes
+      summary: Every recipe, of items, options and batches, with what each costs now.
+      responses:
+        "200":
+          description: The recipes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recipes"
+  /v1/admin/items/{id}/recipe:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: setItemRecipe
+      summary: Sets what goes into an item; no lines for no recipe, back to a typed cost.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecipeInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemRecipe"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/admin/modifiers/{id}/recipe:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: setModifierRecipe
+      summary: Sets how an option changes its item's recipe; amounts may be below 0.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecipeInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModifierRecipe"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/admin/batches:
+    post:
+      operationId: createBatch
+      summary: Adds a batch, as the chef's big cook.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchInput"
+      responses:
+        "201":
+          description: Added.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Batch"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /v1/admin/batches/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateBatch
+      summary: Saves a batch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Batch"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteBatch
+      summary: Deletes a batch no recipe uses.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
 
   /v1/terminal/pair:
@@ -985,13 +1133,16 @@ components:
       allOf:
         - $ref: "#/components/schemas/ItemInput"
         - type: object
-          required: [id, position, nameAr]
+          required: [id, position, nameAr, costFromRecipe]
           properties:
             id:
               type: string
               format: uuid
             position:
               type: integer
+            costFromRecipe:
+              type: boolean
+              description: Its cost comes from its recipe; a costFils sent is then ignored.
 
     ModifierInput:
       type: object
@@ -1025,8 +1176,11 @@ components:
       allOf:
         - $ref: "#/components/schemas/ModifierInput"
         - type: object
-          required: [id, position, nameAr]
+          required: [id, position, nameAr, costFromRecipe]
           properties:
+            costFromRecipe:
+              type: boolean
+              description: Its cost comes from its recipe; a costFils sent is then ignored.
             position:
               type: integer
 
@@ -1690,6 +1844,181 @@ components:
             The area's own sales less refunds: the counter's are items not on
             the kitchen ticket, the kitchen's are items on it. Missing for
             packaging and other, which serve all sales.
+
+    RecipeLine:
+      type: object
+      required: [amount]
+      properties:
+        ingredientId:
+          type: string
+          format: uuid
+          description: An ingredient, in its unit; or a batchId.
+        batchId:
+          type: string
+          format: uuid
+          description: Portions of a batch; not in a batch's own recipe.
+        amount:
+          type: number
+          format: double
+          description: Up to 3 decimals; below 0 only in an option's recipe.
+    RecipeInput:
+      type: object
+      required: [lines]
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecipeLine"
+    RecipeCost:
+      type: object
+      required: [missing]
+      properties:
+        costFils:
+          type: integer
+          format: int64
+          description: What its recipe costs now; missing while an ingredient has no price.
+        missing:
+          type: array
+          description: The ingredients it uses that have no price yet.
+          items:
+            type: string
+    ItemRecipe:
+      allOf:
+        - $ref: "#/components/schemas/RecipeCost"
+        - type: object
+          required: [itemId, lines]
+          properties:
+            itemId:
+              type: string
+              format: uuid
+            lines:
+              type: array
+              items:
+                $ref: "#/components/schemas/RecipeLine"
+    ModifierRecipe:
+      allOf:
+        - $ref: "#/components/schemas/RecipeCost"
+        - type: object
+          required: [modifierId, lines]
+          properties:
+            modifierId:
+              type: string
+              format: uuid
+            lines:
+              type: array
+              items:
+                $ref: "#/components/schemas/RecipeLine"
+    BatchInput:
+      type: object
+      required: [name, yieldPortions, lines]
+      properties:
+        name:
+          type: string
+          description: What the chef calls it, e.g. "Chicken curry base".
+        yieldPortions:
+          type: number
+          format: double
+          description: How many portions one batch makes.
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecipeLine"
+    Batch:
+      allOf:
+        - $ref: "#/components/schemas/RecipeCost"
+        - type: object
+          required: [id, name, yieldPortions, lines, usedBy]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            yieldPortions:
+              type: number
+              format: double
+            lines:
+              type: array
+              items:
+                $ref: "#/components/schemas/RecipeLine"
+            portionCostFils:
+              type: number
+              format: double
+              description: What one portion costs now, the batch's cost over its portions.
+            usedBy:
+              type: integer
+              description: How many items and options use it.
+    Recipes:
+      type: object
+      required: [items, modifiers, batches]
+      properties:
+        items:
+          type: array
+          description: The items that have a recipe.
+          items:
+            $ref: "#/components/schemas/ItemRecipe"
+        modifiers:
+          type: array
+          description: The options that have one.
+          items:
+            $ref: "#/components/schemas/ModifierRecipe"
+        batches:
+          type: array
+          items:
+            $ref: "#/components/schemas/Batch"
+
+    Usage:
+      type: object
+      required: [from, to, ingredients, boughtFils, usedFils, unsortedFils, unrecipedFils]
+      properties:
+        from:
+          $ref: "#/components/schemas/LocalDate"
+        to:
+          $ref: "#/components/schemas/LocalDate"
+        ingredients:
+          type: array
+          description: The ingredients bought or used, the largest difference in money first.
+          items:
+            $ref: "#/components/schemas/IngredientUsage"
+        boughtFils:
+          type: integer
+          format: int64
+          description: What the purchases of sorted products with pack sizes cost.
+        usedFils:
+          type: integer
+          format: int64
+          description: What sales used, by the recipes, at today's prices.
+        unsortedFils:
+          type: integer
+          format: int64
+          description: Purchases of products without an ingredient or pack size, not in boughtFils.
+        unrecipedFils:
+          type: integer
+          format: int64
+          description: Sales of items without a recipe, whose use is not in usedFils.
+    IngredientUsage:
+      type: object
+      required: [ingredientId, name, unit, bought, used]
+      properties:
+        ingredientId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        unit:
+          $ref: "#/components/schemas/Unit"
+        bought:
+          type: number
+          format: double
+          description: How much was bought, in its unit.
+        used:
+          type: number
+          format: double
+          description: How much sales used, by the recipes, in its unit.
+        unitCostFils:
+          type: number
+          format: double
+          description: Its price per unit now; missing while it has none.
 
     PairRequest:
       type: object

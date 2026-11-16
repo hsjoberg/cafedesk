@@ -206,3 +206,16 @@ func (s *Server) UpdateSupplier(w http.ResponseWriter, r *http.Request, id api.I
 	}
 	writeJSON(w, http.StatusOK, x)
 }
+
+func (s *Server) GetUsage(w http.ResponseWriter, r *http.Request, params api.GetUsageParams) {
+	from, to, ok := reportRange(w, params.From, params.To)
+	if !ok {
+		return
+	}
+	out, err := s.store.Usage(r.Context(), user(r).OrgID, from, to, params.ShopId)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}

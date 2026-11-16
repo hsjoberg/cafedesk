@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"cafedesk/apps/server/internal/api"
@@ -120,6 +121,16 @@ func unitWord(u string) string {
 // none, without pack sizes.
 func (s *Store) DeleteIngredient(ctx context.Context, orgID, id uuid.UUID) error {
 	return s.inTx(ctx, func(tx pgx.Tx) error {
+		// Recipes would lose it without a word: take it out of them first.
+		var used int
+		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM recipe_lines l LEFT JOIN items i ON i.id = l.item_id
+			LEFT JOIN modifiers m ON m.id = l.modifier_id LEFT JOIN batches b ON b.id = l.batch_id
+			WHERE l.ingredient_id = $1 AND (NOT i.archived OR NOT m.archived OR NOT b.archived)`, id).Scan(&used); err != nil {
+			return err
+		}
+		if used > 0 {
+			return &Problem{ErrConflict, fmt.Sprintf("%d recipes use it. Take it out of them first.", used)}
+		}
 		tag, err := tx.Exec(ctx, "UPDATE ingredients SET archived = true, updated_at = now() WHERE id = $1 AND org_id = $2 AND NOT archived",
 			id, orgID)
 		if err != nil {
@@ -128,8 +139,10 @@ func (s *Store) DeleteIngredient(ctx context.Context, orgID, id uuid.UUID) error
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		_, err = tx.Exec(ctx, "UPDATE products SET ingredient_id = NULL, pack_milli = NULL, updated_at = now() WHERE ingredient_id = $1", id)
-		return err
+		if _, err := tx.Exec(ctx, "UPDATE products SET ingredient_id = NULL, pack_milli = NULL, updated_at = now() WHERE ingredient_id = $1", id); err != nil {
+			return err
+		}
+		return recost(ctx, tx, orgID)
 	})
 }
 
@@ -161,7 +174,8 @@ func (s *Store) UpdateProduct(ctx context.Context, orgID, id uuid.UUID, in api.P
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		return nil
+		// A new pack size or ingredient moves prices, and recipe costs.
+		return recost(ctx, tx, orgID)
 	})
 	if err != nil {
 		return api.Product{}, err

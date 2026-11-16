@@ -229,8 +229,9 @@ that exists:
 ### Phase 3: Costs and margins (about 2 weeks)
 **Status (2026-11-16):** step 1 is done: a cost per item and per option, kept
 as a history so a change never rewrites past profit, and profit on the Sales
-page. Steps 2.1, purchases, and 2.2, products and ingredients, are done
-too. Next: recipes and the chef's batch.
+page. Step 2 is done too: purchases, products and ingredients, recipes and
+the chef's batches, and bought against used. **Phase 3 is done.** Next: going
+live on Railway (see "Before going live" below), then Phase 4.
 See [docs/phase3.md](docs/phase3.md).
 
 1. Simple: one manual cost per item, giving margin per item.
@@ -270,6 +271,12 @@ See [docs/phase3.md](docs/phase3.md).
 ### Phase 4: Statistics (about 1–2 weeks)
 Sales by day, hour, item and category; margin per item and per day; best and worst sellers; low-margin warnings; optional daily or weekly summary by WhatsApp or email.
 
+### Before going live
+- Railway, set up fresh, with its own tills (nothing moves from testing):
+  Postgres, the server from the GitHub repository, a domain, a bucket for
+  backups and its five settings; `setup` once; the real menu and staff; the
+  tills connected; a test sale; the first night's backup.
+
 ### Later, but needed: shop expenses
 Rent, salaries, gas, electricity, licences and the like don't belong to an
 item, so the profit of Phase 3 is after ingredients and packaging only. A page
@@ -283,6 +290,10 @@ everything: sales, less ingredients, less expenses. Deferred, not dropped.
 - Stock counts and waste tracking.
 - A second terminal, or a kitchen display as another terminal role.
 - Streaming via SSE for instant menu updates and live dashboards.
+- **A till belongs to one admin**: the server refuses a code from a different
+  organization or shop, before using it up; a till is moved by setting it up
+  as a new one ("Start over as a new till", behind a manager's PIN, setting
+  its database aside). Not needed while every till is set up fresh.
 - **Alerts, by Telegram** (deferred until there is time to set up a bot):
   - A Telegram bot, its token and the chat to post to as server settings.
   - From the server: a till silent for 24 hours, a nightly backup that failed

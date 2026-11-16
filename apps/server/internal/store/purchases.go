@@ -294,7 +294,11 @@ func (s *Store) CreatePurchase(ctx context.Context, orgID, userID uuid.UUID, in 
 			id, orgID, in.ShopId, in.Date, now, userID); err != nil {
 			return err
 		}
-		return savePurchase(ctx, tx, orgID, id, in)
+		if err := savePurchase(ctx, tx, orgID, id, in); err != nil {
+			return err
+		}
+		// Prices may have moved: so may the costs of recipes.
+		return recost(ctx, tx, orgID)
 	})
 	if err != nil {
 		return api.Purchase{}, err
@@ -313,7 +317,10 @@ func (s *Store) UpdatePurchase(ctx context.Context, orgID, userID, id uuid.UUID,
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		return savePurchase(ctx, tx, orgID, id, in)
+		if err := savePurchase(ctx, tx, orgID, id, in); err != nil {
+			return err
+		}
+		return recost(ctx, tx, orgID)
 	})
 	if err != nil {
 		return api.Purchase{}, err
@@ -323,12 +330,17 @@ func (s *Store) UpdatePurchase(ctx context.Context, orgID, userID, id uuid.UUID,
 
 // DeletePurchase marks a purchase deleted.
 func (s *Store) DeletePurchase(ctx context.Context, orgID, userID, id uuid.UUID, now time.Time) error {
-	tag, err := s.pool.Exec(ctx, `UPDATE purchases SET deleted_at = $3, deleted_by = $4
-		WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`, id, orgID, now, userID)
-	if err == nil && tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-	return err
+	return s.inTx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE purchases SET deleted_at = $3, deleted_by = $4
+			WHERE id = $1 AND org_id = $2 AND deleted_at IS NULL`, id, orgID, now, userID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		return recost(ctx, tx, orgID)
+	})
 }
 
 const purchaseSelect = `SELECT p.id, p.shop_id, p.date::text, p.supplier_id, s.name, p.reference, p.total_fils,

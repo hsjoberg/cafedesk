@@ -329,6 +329,27 @@ in small type with their pack sizes. The editor takes either: a product
 - The editor's "New ingredient" sits inside the product's, so sorting a new
   product is one save.
 
+### Recipes
+
+**Who and why.** The owner, with the chef, writing down once what goes into
+each item and into the big cook, then looking at what each item makes.
+
+**Layout.** The wall reads like the menu board with a cost line under each
+price: items by category, each row its name, its price, what it costs and
+what it makes, and where the cost comes from (a recipe, typed, or none yet).
+The chef's **batches** come first, as the kitchen starts there: each with its
+cost per portion and how many portions a batch makes. **Options** come last.
+The editor is the recipe card: lines of an ingredient or batch, an amount in
+its unit, and that line's cost at today's prices; under them, what the item
+costs and makes, as you type.
+
+- Lines name their unit after the amount ("40 g", "1 portion"), so a gram is
+  never mistaken for a kilo.
+- A line whose ingredient has no price says so in place, and the total says
+  "No cost yet" rather than a number that leaves it out.
+- An option's amounts may be below 0, and the hint says what that means:
+  "No sugar" is -10 g of sugar.
+
 ## Not designed yet
 
 The Checks screen of Phase 0 is a diagnostic page, styled with the same tokens

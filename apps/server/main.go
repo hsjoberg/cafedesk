@@ -401,6 +401,9 @@ then set DATABASE_URL to .../cafedesk_demo and run demo again`)
 	if err := st.SeedDemoIngredients(ctx, o.ID); err != nil {
 		return fmt.Errorf("demo ingredients: %w", err)
 	}
+	if err := st.SeedDemoRecipes(ctx, o.ID); err != nil {
+		return fmt.Errorf("demo recipes: %w", err)
+	}
 	fmt.Printf(`Set up %s with %d days of made-up sales and purchases.
 Sign in to the admin as %s with the password %s
 Starting PINs for a till: Ravi (manager) 5678, Anil 2468, Priya 1357.

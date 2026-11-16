@@ -1,3 +1,4 @@
+import { A } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js";
 import { createStore } from "solid-js/store";
 import { api, call, type Category, type Item } from "../api/client";
@@ -269,8 +270,20 @@ export function MenuPage() {
               error={fieldError(error(), "nameAr")} />
             <Field label="Price" value={item.price} inputMode="decimal" placeholder="2.50"
               onInput={(v) => setItem("price", v)} error={fieldError(error(), "priceFils")} hint="In dirhams" />
-            <Field label="Cost to make or buy (optional)" value={item.cost} inputMode="decimal"
-              onInput={(v) => setItem("cost", v)} error={fieldError(error(), "costFils")} hint={costHint()} />
+            <Show when={editedItem()?.costFromRecipe} fallback={
+              <Field label="Cost to make or buy (optional)" value={item.cost} inputMode="decimal"
+                onInput={(v) => setItem("cost", v)} error={fieldError(error(), "costFils")} hint={costHint()} />
+            }>
+              <div class="field">
+                <span>Cost, from its recipe</span>
+                <p class="from-recipe">
+                  {editedItem()!.costFils != null ? formatFils(editedItem()!.costFils!) : "No cost yet: an ingredient has no price"}
+                </p>
+                <span class="meta">
+                  It follows the recipe and today's prices. Change it on <A href="/recipes">Recipes</A>.
+                </span>
+              </div>
+            </Show>
             <label class="field">
               <span>Category</span>
               <select class="input" value={item.categoryId} onChange={(e) => setItem("categoryId", e.currentTarget.value)}>

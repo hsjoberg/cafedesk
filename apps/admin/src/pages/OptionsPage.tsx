@@ -5,7 +5,16 @@ import { formatFils, parseAmount } from "../money";
 import { catalog, catalogError, reloadCatalog } from "../state";
 import { DeleteButton, EditorHead, Field, fieldError, FormError, toSaveError, type SaveError } from "../ui";
 
-type ModDraft = { id?: string; name: string; nameAr: string; delta: string; cost: string; isDefault: boolean };
+type ModDraft = {
+  id?: string;
+  name: string;
+  nameAr: string;
+  delta: string;
+  cost: string;
+  isDefault: boolean;
+  /** Its cost comes from its recipe, on Recipes. */
+  fromRecipe?: boolean;
+};
 type GroupDraft = { name: string; nameAr: string; multiple: boolean; modifiers: ModDraft[] };
 
 const blankMod = (): ModDraft => ({ name: "", nameAr: "", delta: "0.00", cost: "", isDefault: false });
@@ -31,7 +40,7 @@ export function OptionsPage() {
         ? { name: group.name, nameAr: group.nameAr, multiple: group.multiple,
             modifiers: group.modifiers.map((m) => ({ id: m.id, name: m.name, nameAr: m.nameAr ?? "",
               delta: formatFils(m.priceDeltaFils), cost: m.costFils == null ? "" : formatFils(m.costFils),
-              isDefault: m.isDefault })) }
+              isDefault: m.isDefault, fromRecipe: m.costFromRecipe })) }
         : { name: "", nameAr: "", multiple: false, modifiers: [{ ...blankMod(), isDefault: true }, blankMod()] },
     );
     setEditing(group?.id ?? null);
@@ -175,9 +184,16 @@ export function OptionsPage() {
                     <Field label="Price change" value={m().delta} inputMode="decimal"
                       onInput={(v) => setG("modifiers", i, "delta", v)}
                       error={fieldError(error(), `modifiers.${i}.priceDeltaFils`)} />
-                    <Field label="Cost (optional)" value={m().cost} inputMode="decimal"
-                      onInput={(v) => setG("modifiers", i, "cost", v)}
-                      error={fieldError(error(), `modifiers.${i}.costFils`)} />
+                    <Show when={m().fromRecipe} fallback={
+                      <Field label="Cost (optional)" value={m().cost} inputMode="decimal"
+                        onInput={(v) => setG("modifiers", i, "cost", v)}
+                        error={fieldError(error(), `modifiers.${i}.costFils`)} />
+                    }>
+                      <div class="field">
+                        <span>Cost, from its recipe</span>
+                        <p class="from-recipe">{m().cost || "No cost yet"}</p>
+                      </div>
+                    </Show>
                   </div>
                   <div class="row">
                     <label class="check">

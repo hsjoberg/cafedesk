@@ -363,6 +363,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/reports/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Each ingredient, between two dates: what was bought, and what sales
+         *     used by today's recipes. Sales count on their business day;
+         *     purchases on their date.
+         */
+        get: operations["getUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/purchases": {
         parameters: {
             query?: never;
@@ -510,6 +531,98 @@ export interface paths {
         post?: never;
         /** Deletes an ingredient. Its products stay, belonging to none. */
         delete: operations["deleteIngredient"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/recipes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every recipe, of items, options and batches, with what each costs now. */
+        get: operations["getRecipes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/items/{id}/recipe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets what goes into an item; no lines for no recipe, back to a typed cost. */
+        put: operations["setItemRecipe"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/modifiers/{id}/recipe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets how an option changes its item's recipe; amounts may be below 0. */
+        put: operations["setModifierRecipe"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adds a batch, as the chef's big cook. */
+        post: operations["createBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/batches/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Saves a batch. */
+        put: operations["updateBatch"];
+        post?: never;
+        /** Deletes a batch no recipe uses. */
+        delete: operations["deleteBatch"];
         options?: never;
         head?: never;
         patch?: never;
@@ -667,6 +780,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             position: number;
+            /** @description Its cost comes from its recipe; a costFils sent is then ignored. */
+            costFromRecipe: boolean;
         };
         ModifierInput: {
             /**
@@ -692,6 +807,8 @@ export interface components {
             costFils: number | null;
         };
         Modifier: components["schemas"]["ModifierInput"] & {
+            /** @description Its cost comes from its recipe; a costFils sent is then ignored. */
+            costFromRecipe: boolean;
             position: number;
         };
         ModifierGroupInput: {
@@ -1135,6 +1252,124 @@ export interface components {
              *     packaging and other, which serve all sales.
              */
             salesFils?: number;
+        };
+        RecipeLine: {
+            /**
+             * Format: uuid
+             * @description An ingredient, in its unit; or a batchId.
+             */
+            ingredientId?: string;
+            /**
+             * Format: uuid
+             * @description Portions of a batch; not in a batch's own recipe.
+             */
+            batchId?: string;
+            /**
+             * Format: double
+             * @description Up to 3 decimals; below 0 only in an option's recipe.
+             */
+            amount: number;
+        };
+        RecipeInput: {
+            lines: components["schemas"]["RecipeLine"][];
+        };
+        RecipeCost: {
+            /**
+             * Format: int64
+             * @description What its recipe costs now; missing while an ingredient has no price.
+             */
+            costFils?: number;
+            /** @description The ingredients it uses that have no price yet. */
+            missing: string[];
+        };
+        ItemRecipe: components["schemas"]["RecipeCost"] & {
+            /** Format: uuid */
+            itemId: string;
+            lines: components["schemas"]["RecipeLine"][];
+        };
+        ModifierRecipe: components["schemas"]["RecipeCost"] & {
+            /** Format: uuid */
+            modifierId: string;
+            lines: components["schemas"]["RecipeLine"][];
+        };
+        BatchInput: {
+            /** @description What the chef calls it, e.g. "Chicken curry base". */
+            name: string;
+            /**
+             * Format: double
+             * @description How many portions one batch makes.
+             */
+            yieldPortions: number;
+            lines: components["schemas"]["RecipeLine"][];
+        };
+        Batch: components["schemas"]["RecipeCost"] & {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: double */
+            yieldPortions: number;
+            lines: components["schemas"]["RecipeLine"][];
+            /**
+             * Format: double
+             * @description What one portion costs now, the batch's cost over its portions.
+             */
+            portionCostFils?: number;
+            /** @description How many items and options use it. */
+            usedBy: number;
+        };
+        Recipes: {
+            /** @description The items that have a recipe. */
+            items: components["schemas"]["ItemRecipe"][];
+            /** @description The options that have one. */
+            modifiers: components["schemas"]["ModifierRecipe"][];
+            batches: components["schemas"]["Batch"][];
+        };
+        Usage: {
+            from: components["schemas"]["LocalDate"];
+            to: components["schemas"]["LocalDate"];
+            /** @description The ingredients bought or used, the largest difference in money first. */
+            ingredients: components["schemas"]["IngredientUsage"][];
+            /**
+             * Format: int64
+             * @description What the purchases of sorted products with pack sizes cost.
+             */
+            boughtFils: number;
+            /**
+             * Format: int64
+             * @description What sales used, by the recipes, at today's prices.
+             */
+            usedFils: number;
+            /**
+             * Format: int64
+             * @description Purchases of products without an ingredient or pack size, not in boughtFils.
+             */
+            unsortedFils: number;
+            /**
+             * Format: int64
+             * @description Sales of items without a recipe, whose use is not in usedFils.
+             */
+            unrecipedFils: number;
+        };
+        IngredientUsage: {
+            /** Format: uuid */
+            ingredientId: string;
+            name: string;
+            unit: components["schemas"]["Unit"];
+            /**
+             * Format: double
+             * @description How much was bought, in its unit.
+             */
+            bought: number;
+            /**
+             * Format: double
+             * @description How much sales used, by the recipes, in its unit.
+             */
+            used: number;
+            /**
+             * Format: double
+             * @description Its price per unit now; missing while it has none.
+             */
+            unitCostFils?: number;
         };
         PairRequest: {
             code: string;
@@ -2006,6 +2241,32 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    getUsage: {
+        parameters: {
+            query: {
+                from: components["schemas"]["LocalDate"];
+                to: components["schemas"]["LocalDate"];
+                shopId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The usage. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Usage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
     listPurchases: {
         parameters: {
             query: {
@@ -2299,6 +2560,159 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["Error"];
+        };
+    };
+    getRecipes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The recipes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recipes"];
+                };
+            };
+        };
+    };
+    setItemRecipe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipeInput"];
+            };
+        };
+        responses: {
+            /** @description Saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemRecipe"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    setModifierRecipe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecipeInput"];
+            };
+        };
+        responses: {
+            /** @description Saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModifierRecipe"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    createBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchInput"];
+            };
+        };
+        responses: {
+            /** @description Added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Batch"];
+                };
+            };
+            400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    updateBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchInput"];
+            };
+        };
+        responses: {
+            /** @description Saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Batch"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+        };
+    };
+    deleteBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     pairTerminal: {

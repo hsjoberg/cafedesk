@@ -1,4 +1,4 @@
-import { useSearchParams } from "@solidjs/router";
+import { A, useSearchParams } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, Index, on, onMount, Show } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import {
@@ -12,6 +12,7 @@ import {
   type PurchaseList,
   type Supplier,
   type Unit,
+  type Usage,
 } from "../api/client";
 import { areas, unitOf, units } from "../areas";
 import { OverdueInvoices } from "../components/Overdue";
@@ -87,6 +88,7 @@ export function PurchasesPage() {
     });
 
   const [list, setList] = createSignal<PurchaseList>();
+  const [usage, setUsage] = createSignal<Usage>();
   const [loading, setLoading] = createSignal(false);
   const [loadError, setLoadError] = createSignal("");
   let asked = 0;
@@ -95,9 +97,11 @@ export function PurchasesPage() {
     setLoading(true);
     try {
       const query = { from: from(), to: to(), shopId: shop() ? params.shop : undefined };
-      const r = await call(api.GET("/v1/admin/purchases", { params: { query } }));
+      const [r, u] = await Promise.all([call(api.GET("/v1/admin/purchases", { params: { query } })),
+        call(api.GET("/v1/admin/reports/usage", { params: { query } }))]);
       if (mine === asked) {
         setList(r);
+        setUsage(u);
         setLoadError("");
       }
     } catch (e) {
@@ -490,6 +494,10 @@ export function PurchasesPage() {
                 </p>
               </section>
 
+              <Show when={usage()}>
+                {(u) => <UsagePanel usage={u()} />}
+              </Show>
+
               <section class="panel">
                 <h2>{r().purchases.length === 1 ? "1 purchase" : `${r().purchases.length} purchases`}</h2>
                 <Show when={r().purchases.length} fallback={
@@ -731,5 +739,92 @@ export function PurchasesPage() {
         </Show>
       </aside>
     </div>
+  );
+}
+
+/** An amount in its unit, in kg or litres from 1,000 up: "8.16 kg", "120 g", "5 pieces". */
+function amountIn(n: number, unit: Unit): string {
+  const a = Math.abs(n);
+  const f = (x: number, d: number) => new Intl.NumberFormat("en", { maximumFractionDigits: d }).format(x);
+  if (unit === "g") return a >= 1000 ? `${f(a / 1000, 2)} kg` : `${f(a, 1)} g`;
+  if (unit === "ml") return a >= 1000 ? `${f(a / 1000, 2)} L` : `${f(a, 1)} ml`;
+  return `${f(a, 1)} ${a === 1 ? "piece" : "pieces"}`;
+}
+
+/**
+ * Bought against used: each ingredient's purchases set against what sales
+ * used by the recipes. The difference is stock, waste, or a recipe off; the
+ * panel says so, and what it leaves out.
+ */
+function UsagePanel(props: { usage: Usage }) {
+  const u = () => props.usage;
+  return (
+    <section class="panel">
+      <h2>Bought against used</h2>
+      <Show when={u().ingredients.length} fallback={
+        <p class="empty">
+          Nothing to set side by side yet. It needs purchases sorted into ingredients, and items with recipes, on{" "}
+          <A href="/ingredients">Ingredients</A> and <A href="/recipes">Recipes</A>.
+        </p>
+      }>
+        <p>
+          Ingredients bought for <strong>{formatAmount(u().boughtFils)}</strong>; by the recipes, sales used{" "}
+          <strong>{formatAmount(u().usedFils)}</strong> of them.
+        </p>
+        <Show when={u().unrecipedFils > 0}>
+          <p class="left-out">
+            Only items with a recipe count as used. Sales of {formatAmount(u().unrecipedFils)} were of items without one, so
+            "more bought" reads high until they have recipes, on <A href="/recipes">Recipes</A>.
+          </p>
+        </Show>
+        <Show when={u().unsortedFils > 0}>
+          <p class="meta">
+            Purchases of products not sorted into an ingredient, {formatAmount(u().unsortedFils)}, aren't in "bought".
+          </p>
+        </Show>
+        <div class="table-wrap">
+          <table class="table usage">
+            <thead>
+              <tr>
+                <th scope="col">Ingredient</th>
+                <th scope="col" class="n">Bought</th>
+                <th scope="col" class="n">Sales used</th>
+                <th scope="col" class="n">Difference</th>
+                <th scope="col" class="n">Worth</th>
+              </tr>
+            </thead>
+            <tbody>
+              <For each={u().ingredients}>
+                {(x) => {
+                  const diff = () => x.bought - x.used;
+                  return (
+                    <tr>
+                      <th scope="row">{x.name}</th>
+                      <td class="n">{x.bought ? amountIn(x.bought, x.unit) : ""}</td>
+                      <td class="n">{x.used ? amountIn(x.used, x.unit) : ""}</td>
+                      <td class="n">
+                        <Show when={Math.abs(diff()) > 0.0005} fallback={<span class="muted">Even</span>}>
+                          {amountIn(diff(), x.unit)} more {diff() > 0 ? "bought" : "used"}
+                        </Show>
+                      </td>
+                      <td class="n">
+                        <Show when={x.unitCostFils != null} fallback={<span class="muted">No price</span>}>
+                          {formatAmount(Math.round(Math.abs(diff()) * x.unitCostFils!))}
+                        </Show>
+                      </td>
+                    </tr>
+                  );
+                }}
+              </For>
+            </tbody>
+          </table>
+        </div>
+        <p class="meta">
+          More bought than used: stock on the shelf, waste, or a recipe that asks for too little. More used than bought:
+          stock from before these dates, or a recipe that asks for too much. Without stock counts, a month says more than a
+          week. Used is by today's recipes; refunded items count as used, voided ones don't.
+        </p>
+      </Show>
+    </section>
   );
 }

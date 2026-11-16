@@ -11,6 +11,7 @@ export type CategoryInput = Schemas["CategoryInput"];
 export type Item = Schemas["Item"];
 export type ItemInput = Schemas["ItemInput"];
 export type ModifierGroup = Schemas["ModifierGroup"];
+export type Modifier = Schemas["Modifier"];
 export type ModifierGroupInput = Schemas["ModifierGroupInput"];
 export type ModifierInput = Schemas["ModifierInput"];
 export type Staff = Schemas["Staff"];
@@ -26,6 +27,10 @@ export type PurchaseInput = Schemas["PurchaseInput"];
 export type PurchaseList = Schemas["PurchaseList"];
 export type Ingredient = Schemas["Ingredient"];
 export type Unit = Schemas["Unit"];
+export type Recipes = Schemas["Recipes"];
+export type RecipeLine = Schemas["RecipeLine"];
+export type Batch = Schemas["Batch"];
+export type Usage = Schemas["Usage"];
 
 // Same origin: the server serves the admin, and Vite passes /v1 to it in
 // development.

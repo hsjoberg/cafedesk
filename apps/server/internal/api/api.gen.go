@@ -194,6 +194,36 @@ type AreaSpend struct {
 	SalesFils *int64 `json:"salesFils,omitempty"`
 }
 
+// Batch defines model for Batch.
+type Batch struct {
+	// CostFils What its recipe costs now; missing while an ingredient has no price.
+	CostFils *int64             `json:"costFils,omitempty"`
+	Id       openapi_types.UUID `json:"id"`
+	Lines    []RecipeLine       `json:"lines"`
+
+	// Missing The ingredients it uses that have no price yet.
+	Missing []string `json:"missing"`
+	Name    string   `json:"name"`
+
+	// PortionCostFils What one portion costs now, the batch's cost over its portions.
+	PortionCostFils *float64 `json:"portionCostFils,omitempty"`
+
+	// UsedBy How many items and options use it.
+	UsedBy        int     `json:"usedBy"`
+	YieldPortions float64 `json:"yieldPortions"`
+}
+
+// BatchInput defines model for BatchInput.
+type BatchInput struct {
+	Lines []RecipeLine `json:"lines"`
+
+	// Name What the chef calls it, e.g. "Chicken curry base".
+	Name string `json:"name"`
+
+	// YieldPortions How many portions one batch makes.
+	YieldPortions float64 `json:"yieldPortions"`
+}
+
 // BusinessDayEvent A day as it stands, opened or closed.
 type BusinessDayEvent struct {
 	ClosedAt        *time.Time          `json:"closedAt,omitempty"`
@@ -378,6 +408,21 @@ type IngredientInput struct {
 	Unit Unit   `json:"unit"`
 }
 
+// IngredientUsage defines model for IngredientUsage.
+type IngredientUsage struct {
+	// Bought How much was bought, in its unit.
+	Bought       float64            `json:"bought"`
+	IngredientId openapi_types.UUID `json:"ingredientId"`
+	Name         string             `json:"name"`
+	Unit         Unit               `json:"unit"`
+
+	// UnitCostFils Its price per unit now; missing while it has none.
+	UnitCostFils *float64 `json:"unitCostFils,omitempty"`
+
+	// Used How much sales used, by the recipes, in its unit.
+	Used float64 `json:"used"`
+}
+
 // Item defines model for Item.
 type Item struct {
 	CategoryId openapi_types.UUID `json:"categoryId"`
@@ -386,8 +431,11 @@ type Item struct {
 	// Admin only: tills never get it. A change applies to sales from
 	// now on, except an item's first cost, which applies to its earlier
 	// sales too, as they had none.
-	CostFils *int64             `json:"costFils"`
-	Id       openapi_types.UUID `json:"id"`
+	CostFils *int64 `json:"costFils"`
+
+	// CostFromRecipe Its cost comes from its recipe; a costFils sent is then ignored.
+	CostFromRecipe bool               `json:"costFromRecipe"`
+	Id             openapi_types.UUID `json:"id"`
 
 	// Kitchen Prints on the kitchen ticket.
 	Kitchen bool `json:"kitchen"`
@@ -420,6 +468,17 @@ type ItemInput struct {
 	PriceFils        int64                `json:"priceFils"`
 }
 
+// ItemRecipe defines model for ItemRecipe.
+type ItemRecipe struct {
+	// CostFils What its recipe costs now; missing while an ingredient has no price.
+	CostFils *int64             `json:"costFils,omitempty"`
+	ItemId   openapi_types.UUID `json:"itemId"`
+	Lines    []RecipeLine       `json:"lines"`
+
+	// Missing The ingredients it uses that have no price yet.
+	Missing []string `json:"missing"`
+}
+
 // ItemSales defines model for ItemSales.
 type ItemSales struct {
 	// CostFils What they cost; missing when the item had no cost for some of these sales.
@@ -448,6 +507,9 @@ type Modifier struct {
 	// or null for nothing known (counted as nothing). Applies as an
 	// item's cost does.
 	CostFils *int64 `json:"costFils"`
+
+	// CostFromRecipe Its cost comes from its recipe; a costFils sent is then ignored.
+	CostFromRecipe bool `json:"costFromRecipe"`
 
 	// Id Set to keep an existing modifier; left out for a new one.
 	Id openapi_types.UUID `json:"id"`
@@ -499,6 +561,17 @@ type ModifierInput struct {
 
 	// PriceDeltaFils Added to the item's price.
 	PriceDeltaFils int64 `json:"priceDeltaFils"`
+}
+
+// ModifierRecipe defines model for ModifierRecipe.
+type ModifierRecipe struct {
+	// CostFils What its recipe costs now; missing while an ingredient has no price.
+	CostFils *int64       `json:"costFils,omitempty"`
+	Lines    []RecipeLine `json:"lines"`
+
+	// Missing The ingredients it uses that have no price yet.
+	Missing    []string           `json:"missing"`
+	ModifierId openapi_types.UUID `json:"modifierId"`
 }
 
 // Move defines model for Move.
@@ -742,6 +815,43 @@ type PurchaseList struct {
 
 	// TotalFils All that was bought.
 	TotalFils int64 `json:"totalFils"`
+}
+
+// RecipeCost defines model for RecipeCost.
+type RecipeCost struct {
+	// CostFils What its recipe costs now; missing while an ingredient has no price.
+	CostFils *int64 `json:"costFils,omitempty"`
+
+	// Missing The ingredients it uses that have no price yet.
+	Missing []string `json:"missing"`
+}
+
+// RecipeInput defines model for RecipeInput.
+type RecipeInput struct {
+	Lines []RecipeLine `json:"lines"`
+}
+
+// RecipeLine defines model for RecipeLine.
+type RecipeLine struct {
+	// Amount Up to 3 decimals; below 0 only in an option's recipe.
+	Amount float64 `json:"amount"`
+
+	// BatchId Portions of a batch; not in a batch's own recipe.
+	BatchId *openapi_types.UUID `json:"batchId,omitempty"`
+
+	// IngredientId An ingredient, in its unit; or a batchId.
+	IngredientId *openapi_types.UUID `json:"ingredientId,omitempty"`
+}
+
+// Recipes defines model for Recipes.
+type Recipes struct {
+	Batches []Batch `json:"batches"`
+
+	// Items The items that have a recipe.
+	Items []ItemRecipe `json:"items"`
+
+	// Modifiers The options that have one.
+	Modifiers []ModifierRecipe `json:"modifiers"`
 }
 
 // RefundEvent defines model for RefundEvent.
@@ -1023,6 +1133,30 @@ type TillSales struct {
 // Unit defines model for Unit.
 type Unit string
 
+// Usage defines model for Usage.
+type Usage struct {
+	// BoughtFils What the purchases of sorted products with pack sizes cost.
+	BoughtFils int64 `json:"boughtFils"`
+
+	// From A date in the shop's own time, YYYY-MM-DD.
+	From LocalDate `json:"from"`
+
+	// Ingredients The ingredients bought or used, the largest difference in money first.
+	Ingredients []IngredientUsage `json:"ingredients"`
+
+	// To A date in the shop's own time, YYYY-MM-DD.
+	To LocalDate `json:"to"`
+
+	// UnrecipedFils Sales of items without a recipe, whose use is not in usedFils.
+	UnrecipedFils int64 `json:"unrecipedFils"`
+
+	// UnsortedFils Purchases of products without an ingredient or pack size, not in boughtFils.
+	UnsortedFils int64 `json:"unsortedFils"`
+
+	// UsedFils What sales used, by the recipes, at today's prices.
+	UsedFils int64 `json:"usedFils"`
+}
+
 // User defines model for User.
 type User struct {
 	Email string             `json:"email"`
@@ -1055,10 +1189,23 @@ type GetSalesReportParams struct {
 	ShopId *openapi_types.UUID `form:"shopId,omitempty" json:"shopId,omitempty"`
 }
 
+// GetUsageParams defines parameters for GetUsage.
+type GetUsageParams struct {
+	From   LocalDate           `form:"from" json:"from"`
+	To     LocalDate           `form:"to" json:"to"`
+	ShopId *openapi_types.UUID `form:"shopId,omitempty" json:"shopId,omitempty"`
+}
+
 // GetChangesParams defines parameters for GetChanges.
 type GetChangesParams struct {
 	Since int64 `form:"since" json:"since"`
 }
+
+// CreateBatchJSONRequestBody defines body for CreateBatch for application/json ContentType.
+type CreateBatchJSONRequestBody = BatchInput
+
+// UpdateBatchJSONRequestBody defines body for UpdateBatch for application/json ContentType.
+type UpdateBatchJSONRequestBody = BatchInput
 
 // CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
 type CreateCategoryJSONRequestBody = CategoryInput
@@ -1084,6 +1231,9 @@ type UpdateItemJSONRequestBody = ItemInput
 // MoveItemJSONRequestBody defines body for MoveItem for application/json ContentType.
 type MoveItemJSONRequestBody = Move
 
+// SetItemRecipeJSONRequestBody defines body for SetItemRecipe for application/json ContentType.
+type SetItemRecipeJSONRequestBody = RecipeInput
+
 // CreateModifierGroupJSONRequestBody defines body for CreateModifierGroup for application/json ContentType.
 type CreateModifierGroupJSONRequestBody = ModifierGroupInput
 
@@ -1092,6 +1242,9 @@ type UpdateModifierGroupJSONRequestBody = ModifierGroupInput
 
 // MoveModifierGroupJSONRequestBody defines body for MoveModifierGroup for application/json ContentType.
 type MoveModifierGroupJSONRequestBody = Move
+
+// SetModifierRecipeJSONRequestBody defines body for SetModifierRecipe for application/json ContentType.
+type SetModifierRecipeJSONRequestBody = RecipeInput
 
 // UpdateProductJSONRequestBody defines body for UpdateProduct for application/json ContentType.
 type UpdateProductJSONRequestBody = ProductInput
@@ -1128,6 +1281,15 @@ type ServerInterface interface {
 	// Healthz Liveness check, polled by Railway.
 	// (GET /healthz)
 	Healthz(w http.ResponseWriter, r *http.Request)
+	// CreateBatch Adds a batch, as the chef's big cook.
+	// (POST /v1/admin/batches)
+	CreateBatch(w http.ResponseWriter, r *http.Request)
+	// DeleteBatch Deletes a batch no recipe uses.
+	// (DELETE /v1/admin/batches/{id})
+	DeleteBatch(w http.ResponseWriter, r *http.Request, id ID)
+	// UpdateBatch Saves a batch.
+	// (PUT /v1/admin/batches/{id})
+	UpdateBatch(w http.ResponseWriter, r *http.Request, id ID)
 	// GetCatalog The whole menu of the organization.
 	// (GET /v1/admin/catalog)
 	GetCatalog(w http.ResponseWriter, r *http.Request)
@@ -1167,6 +1329,9 @@ type ServerInterface interface {
 	// MoveItem Moves an item within its category.
 	// (POST /v1/admin/items/{id}/move)
 	MoveItem(w http.ResponseWriter, r *http.Request, id ID)
+	// SetItemRecipe Sets what goes into an item; no lines for no recipe, back to a typed cost.
+	// (PUT /v1/admin/items/{id}/recipe)
+	SetItemRecipe(w http.ResponseWriter, r *http.Request, id ID)
 	// GetMe The signed-in user, their organization and its shops.
 	// (GET /v1/admin/me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -1182,6 +1347,9 @@ type ServerInterface interface {
 
 	// (POST /v1/admin/modifier-groups/{id}/move)
 	MoveModifierGroup(w http.ResponseWriter, r *http.Request, id ID)
+	// SetModifierRecipe Sets how an option changes its item's recipe; amounts may be below 0.
+	// (PUT /v1/admin/modifiers/{id}/recipe)
+	SetModifierRecipe(w http.ResponseWriter, r *http.Request, id ID)
 	// ListProducts What the organization buys, by name, with what its latest purchase paid.
 	// (GET /v1/admin/products)
 	ListProducts(w http.ResponseWriter, r *http.Request)
@@ -1202,11 +1370,19 @@ type ServerInterface interface {
 	// UpdatePurchase Saves a purchase; its lines are replaced by those given.
 	// (PUT /v1/admin/purchases/{id})
 	UpdatePurchase(w http.ResponseWriter, r *http.Request, id ID)
+	// GetRecipes Every recipe, of items, options and batches, with what each costs now.
+	// (GET /v1/admin/recipes)
+	GetRecipes(w http.ResponseWriter, r *http.Request)
 	// GetSalesReport What the shops took between two business dates, both included, at
 	// most 366 days apart. Sales and refunds count on the business day the
 	// till had open, as on its own day report.
 	// (GET /v1/admin/reports/sales)
 	GetSalesReport(w http.ResponseWriter, r *http.Request, params GetSalesReportParams)
+	// GetUsage Each ingredient, between two dates: what was bought, and what sales
+	// used by today's recipes. Sales count on their business day;
+	// purchases on their date.
+	// (GET /v1/admin/reports/usage)
+	GetUsage(w http.ResponseWriter, r *http.Request, params GetUsageParams)
 	// SignOut Signs out, ending the session.
 	// (DELETE /v1/admin/session)
 	SignOut(w http.ResponseWriter, r *http.Request)
@@ -1268,6 +1444,72 @@ func (siw *ServerInterfaceWrapper) Healthz(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Healthz(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateBatch operation middleware
+func (siw *ServerInterfaceWrapper) CreateBatch(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateBatch(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteBatch operation middleware
+func (siw *ServerInterfaceWrapper) DeleteBatch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteBatch(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateBatch operation middleware
+func (siw *ServerInterfaceWrapper) UpdateBatch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateBatch(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1555,6 +1797,32 @@ func (siw *ServerInterfaceWrapper) MoveItem(w http.ResponseWriter, r *http.Reque
 	handler.ServeHTTP(w, r)
 }
 
+// SetItemRecipe operation middleware
+func (siw *ServerInterfaceWrapper) SetItemRecipe(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetItemRecipe(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
@@ -1652,6 +1920,32 @@ func (siw *ServerInterfaceWrapper) MoveModifierGroup(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.MoveModifierGroup(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetModifierRecipe operation middleware
+func (siw *ServerInterfaceWrapper) SetModifierRecipe(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetModifierRecipe(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1826,6 +2120,20 @@ func (siw *ServerInterfaceWrapper) UpdatePurchase(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetRecipes operation middleware
+func (siw *ServerInterfaceWrapper) GetRecipes(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRecipes(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSalesReport operation middleware
 func (siw *ServerInterfaceWrapper) GetSalesReport(w http.ResponseWriter, r *http.Request) {
 
@@ -1876,6 +2184,65 @@ func (siw *ServerInterfaceWrapper) GetSalesReport(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSalesReport(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUsage operation middleware
+func (siw *ServerInterfaceWrapper) GetUsage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetUsageParams
+
+	// ------------- Required query parameter "from" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "from", r.URL.Query(), &params.From, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "to", r.URL.Query(), &params.To, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "shopId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "shopId", r.URL.Query(), &params.ShopId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "shopId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "shopId", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUsage(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2308,6 +2675,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/terminals/{id}/pairing-code", wrapper.CreatePairingCode)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/terminals/{id}", wrapper.UnpairTerminal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/reports/sales", wrapper.GetSalesReport)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/reports/usage", wrapper.GetUsage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/purchases", wrapper.ListPurchases)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/purchases", wrapper.CreatePurchase)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/purchases/{id}", wrapper.DeletePurchase)
@@ -2320,6 +2688,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/ingredients", wrapper.CreateIngredient)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/ingredients/{id}", wrapper.DeleteIngredient)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/ingredients/{id}", wrapper.UpdateIngredient)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/admin/recipes", wrapper.GetRecipes)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/items/{id}/recipe", wrapper.SetItemRecipe)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/modifiers/{id}/recipe", wrapper.SetModifierRecipe)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/admin/batches", wrapper.CreateBatch)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/v1/admin/batches/{id}", wrapper.DeleteBatch)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/v1/admin/batches/{id}", wrapper.UpdateBatch)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/terminal/pair", wrapper.PairTerminal)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/v1/terminal/changes", wrapper.GetChanges)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/v1/terminal/events", wrapper.SendEvents)

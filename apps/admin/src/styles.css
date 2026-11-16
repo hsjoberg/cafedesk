@@ -900,7 +900,8 @@ fieldset.bare {
   margin-top: 8px;
 }
 .slip a,
-.panel .meta a {
+.panel .meta a,
+.left-out a {
   color: inherit;
   font-weight: 500;
 }
@@ -1125,6 +1126,111 @@ fieldset.bare {
 }
 .unsorted .product-row[aria-pressed="true"] {
   outline: 3px solid var(--ink);
+}
+
+.left-out {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--paper);
+  border-left: 4px solid var(--ink);
+  border-radius: 4px;
+  font-size: var(--fs-meta);
+}
+
+/* Recipes. */
+
+.batch-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+.batch {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--paper);
+  text-align: left;
+  cursor: pointer;
+}
+.batch:hover {
+  background: var(--tile-pressed);
+}
+.batch[aria-pressed="true"] {
+  outline: 3px solid var(--ink);
+}
+.batch strong {
+  font-weight: 500;
+  font-size: var(--fs-item);
+}
+.batch .price {
+  font-size: var(--fs-price);
+  font-weight: 500;
+}
+.recipe-table tbody tr {
+  cursor: pointer;
+}
+.recipe-table tbody tr:hover > *,
+.recipe-table tbody tr.on > * {
+  background: var(--tile-pressed);
+}
+.recipe-table .from {
+  font-size: var(--fs-meta);
+}
+.link-row {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The editor is the recipe card: a line, an amount and its unit, its cost. */
+.recipe-line {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+.recipe-amount {
+  display: grid;
+  grid-template-columns: 90px auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.recipe-line .input {
+  min-height: 44px;
+  font-size: var(--fs-body);
+}
+.recipe-amount .input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.recipe-amount .unit {
+  color: var(--ink-muted);
+  font-size: var(--fs-meta);
+}
+.recipe-amount .line-cost {
+  text-align: right;
+}
+.recipe-total {
+  padding-top: 12px;
+  border-top: 1px dashed var(--rule);
+}
+.recipe-total p {
+  margin: 0 0 4px;
+}
+.from-recipe {
+  margin: 0;
+  min-height: 44px;
+  padding: 10px 0 0;
+  font-size: var(--fs-item);
+  font-weight: 500;
 }
 
 /* The sign-in page. */

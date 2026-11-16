@@ -65,7 +65,7 @@ func (s *Store) Catalog(ctx context.Context, orgID uuid.UUID) (api.Catalog, erro
 	}
 
 	rows, err = s.pool.Query(ctx, `SELECT i.id, i.category_id, i.name, i.name_ar, i.price_fils, i.position, i.kitchen,
-		`+currentCost(itemCosts, "i")+`
+		`+currentCost(itemCosts, "i")+`, EXISTS (SELECT 1 FROM recipe_lines r WHERE r.item_id = i.id)
 		FROM items i JOIN categories c ON c.id = i.category_id
 		WHERE i.org_id = $1 AND NOT i.archived ORDER BY c.position, i.position`, orgID)
 	if err != nil {
@@ -73,7 +73,8 @@ func (s *Store) Catalog(ctx context.Context, orgID uuid.UUID) (api.Catalog, erro
 	}
 	c.Items, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (api.Item, error) {
 		var x api.Item
-		err := r.Scan(&x.Id, &x.CategoryId, &x.Name, &x.NameAr, &x.PriceFils, &x.Position, &x.Kitchen, &x.CostFils)
+		err := r.Scan(&x.Id, &x.CategoryId, &x.Name, &x.NameAr, &x.PriceFils, &x.Position, &x.Kitchen, &x.CostFils,
+			&x.CostFromRecipe)
 		x.ModifierGroupIds = groupsOf[x.Id]
 		if x.ModifierGroupIds == nil {
 			x.ModifierGroupIds = []uuid.UUID{}
@@ -86,7 +87,7 @@ func (s *Store) Catalog(ctx context.Context, orgID uuid.UUID) (api.Catalog, erro
 
 	mods := map[uuid.UUID][]api.Modifier{}
 	rows, err = s.pool.Query(ctx, `SELECT m.id, m.group_id, m.name, m.name_ar, m.price_delta_fils, m.is_default, m.position,
-		`+currentCost(modifierCosts, "m")+`
+		`+currentCost(modifierCosts, "m")+`, EXISTS (SELECT 1 FROM recipe_lines r WHERE r.modifier_id = m.id)
 		FROM modifiers m WHERE m.org_id = $1 AND NOT m.archived ORDER BY m.group_id, m.position`, orgID)
 	if err != nil {
 		return c, err
@@ -94,7 +95,8 @@ func (s *Store) Catalog(ctx context.Context, orgID uuid.UUID) (api.Catalog, erro
 	for rows.Next() {
 		var m api.Modifier
 		var group uuid.UUID
-		if err := rows.Scan(&m.Id, &group, &m.Name, &m.NameAr, &m.PriceDeltaFils, &m.IsDefault, &m.Position, &m.CostFils); err != nil {
+		if err := rows.Scan(&m.Id, &group, &m.Name, &m.NameAr, &m.PriceDeltaFils, &m.IsDefault, &m.Position, &m.CostFils,
+			&m.CostFromRecipe); err != nil {
 			return c, err
 		}
 		mods[group] = append(mods[group], m)
@@ -385,6 +387,15 @@ func (s *Store) UpdateItem(ctx context.Context, orgID, id uuid.UUID, in api.Item
 		if err := setItemGroups(ctx, tx, id, it.ModifierGroupIds); err != nil {
 			return err
 		}
+		recipe, err := hasRecipe(ctx, tx, "item_id", id)
+		if err != nil {
+			return err
+		}
+		it.CostFromRecipe = recipe
+		if recipe {
+			// Its cost is its recipe's: say what that is.
+			return tx.QueryRow(ctx, "SELECT "+currentCost(itemCosts, "i")+" FROM items i WHERE i.id = $1", id).Scan(&it.CostFils)
+		}
 		if err := setCost(ctx, tx, itemCosts, orgID, id, it.CostFils); err != nil {
 			return err
 		}
@@ -518,7 +529,17 @@ func saveModifiers(ctx context.Context, tx pgx.Tx, orgID, groupID uuid.UUID, in 
 				return nil, err
 			}
 		}
-		if err := setCost(ctx, tx, modifierCosts, orgID, mod.Id, mod.CostFils); err != nil {
+		recipe, err := hasRecipe(ctx, tx, "modifier_id", mod.Id)
+		if err != nil {
+			return nil, err
+		}
+		mod.CostFromRecipe = recipe
+		if recipe {
+			if err := tx.QueryRow(ctx, "SELECT "+currentCost(modifierCosts, "m")+" FROM modifiers m WHERE m.id = $1",
+				mod.Id).Scan(&mod.CostFils); err != nil {
+				return nil, err
+			}
+		} else if err := setCost(ctx, tx, modifierCosts, orgID, mod.Id, mod.CostFils); err != nil {
 			return nil, err
 		}
 		out = append(out, mod)

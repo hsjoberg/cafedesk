@@ -48,6 +48,23 @@ func TestDemoSales(t *testing.T) {
 	if err := st.SeedDemoIngredients(ctx, org); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.SeedDemoRecipes(ctx, org); err != nil {
+		t.Fatal(err)
+	}
+	recipes, err := st.Recipes(ctx, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	costed := 0
+	for _, r := range recipes.Items {
+		if r.CostFils != nil && *r.CostFils > 0 {
+			costed++
+		}
+	}
+	if len(recipes.Batches) != 3 || costed != 6 || len(recipes.Modifiers) != 4 {
+		t.Errorf("demo recipes: %d batches, %d of %d items costed, %d options", len(recipes.Batches), costed,
+			len(recipes.Items), len(recipes.Modifiers))
+	}
 	ingredients, err := st.ListIngredients(ctx, org)
 	if err != nil {
 		t.Fatal(err)

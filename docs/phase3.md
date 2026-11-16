@@ -7,8 +7,8 @@ Phase 3 lets the admin show what the shop makes, not only what it takes.
 | 1 | A cost for each item and option, and profit on the Sales page | Done |
 | 2.1 | Purchases: what was bought, and where the money went | Done |
 | 2.2 | Products and ingredients: pack sizes, and a price per kg, litre or piece | Done |
-| 2.3 | Recipes and the chef's batch: an item's cost from what goes into it | Next |
-| 2.4 | The gap: what was bought against what sales should have used | |
+| 2.3 | Recipes and the chef's batch: an item's cost from what goes into it | Done |
+| 2.4 | Bought against used: what was bought against what sales used, by the recipes | Done |
 
 ## Purchases
 
@@ -106,6 +106,53 @@ use.
 
 The `demo` command sorts its products, leaving dish soap and lemons unsorted.
 
+## Recipes
+
+**Recipes**, in the admin, writes down what goes into what the shop sells.
+
+- An **item's recipe** is lines of an ingredient and an amount in its unit
+  ("Evaporated milk, 30 g"), or portions of a batch ("Chicken curry base, 1
+  portion"). The editor gives each line's cost at today's prices, and what
+  the item costs and makes on each sale, as you type.
+- A **batch** is the chef's big cook: what goes in the pot, and how many
+  portions it makes. A portion costs the pot's cost over its portions. A meal
+  uses 1 portion, or 1.5 for a big plate. A batch is made of ingredients, not
+  of other batches.
+- An **option's recipe** changes its item's: "Extra sugar" +5 g of sugar,
+  "No sugar" -10 g, "Extra rice" half a portion of the rice pot. It may cost
+  less than nothing.
+- **Costs follow by themselves.** An item or option with a recipe gets its
+  cost from it, and it is worked out again whenever a recipe or batch is
+  saved, a purchase is recorded, changed or deleted, or a product is sorted:
+  each change goes into the cost history from that moment, so past profit
+  never moves. A purchase entered late moves costs from when it was entered,
+  not from its date. On Menu and Options such a cost shows as "Cost, from its
+  recipe", not a field. Removing a recipe brings the typed cost back.
+- **A missing price is said, not guessed.** If an ingredient has no price yet,
+  the item has no cost, and the editor names the ingredient.
+- An ingredient or batch a recipe uses can't be deleted until it's taken out.
+
+## Bought against used
+
+On **Purchases**, for the dates chosen: each ingredient's purchases against
+what sales used by the recipes, the largest difference in money first.
+
+- **Bought** is purchases of products sorted into an ingredient with a pack
+  size, in its unit. **Used** is each item sold times its recipe, batches
+  broken into their ingredients, options' adjustments included. Refunded
+  items count as used (the food was made); voided orders don't.
+- Above the table: what was bought, and what sales used, in money. When items
+  without a recipe sold, it says how much, as "more bought" reads high until
+  they have recipes. Purchases of unsorted products are said too.
+- How to read it, on the page: more bought than used is stock on the shelf,
+  waste, or a recipe asking too little; more used than bought, stock from
+  before the dates, or a recipe asking too much. Without stock counts (Phase
+  5) a month says more than a week.
+- Used is by today's recipes: no history of recipes is kept.
+
+The `demo` command adds three batches, recipes for the teas and some meals,
+and the sugar and extras options.
+
 ## Costs
 
 - **Menu**: an item's editor has **Cost to make or buy**, beside its price,
@@ -141,6 +188,11 @@ Purchases: `GET/POST /v1/admin/purchases`, `PUT/DELETE /v1/admin/purchases/{id}`
 product by `productId`, or a product by `productName`, which is added if new;
 the supplier likewise. Quantities have up to 3 decimals, kept as thousandths
 (migration 0006).
+
+Recipes: `GET /v1/admin/recipes`, `PUT /v1/admin/items/{id}/recipe`,
+`PUT /v1/admin/modifiers/{id}/recipe`, `POST /v1/admin/batches`,
+`PUT/DELETE /v1/admin/batches/{id}` (migration 0009). Bought against used:
+`GET /v1/admin/reports/usage`.
 
 Ingredients: `GET/POST /v1/admin/ingredients`, `PUT/DELETE
 /v1/admin/ingredients/{id}`, and `PUT /v1/admin/products/{id}` for a product's
