@@ -159,14 +159,23 @@ func amountPad(c *ui.Context, prefix string, e *amountEntry, disabled bool) ui.E
 // pinPad is four PIN dots and a numpad laid out as a phone's: 1 2 3 on
 // top. A wrong PIN shakes the dots.
 func pinPad(c *ui.Context, prefix string, typed int, shakeAt time.Time, disabled bool, onKey func(string)) {
-	dots := ui.Row(c).Gap(18).Justify(ui.Center).Height(28).AlignItems(ui.Center)
+	codePad(c, prefix, pinLength, typed, shakeAt, disabled, onKey)
+}
+
+// codePad is a dot for each digit of a code, and a numpad for typing it.
+func codePad(c *ui.Context, prefix string, length, typed int, shakeAt time.Time, disabled bool, onKey func(string)) {
+	gap := float32(18)
+	if length > 6 {
+		gap = 12
+	}
+	dots := ui.Row(c).Gap(gap).Justify(ui.Center).Height(28).AlignItems(ui.Center)
 	if since := c.Now().Sub(shakeAt); !shakeAt.IsZero() && since < 400*time.Millisecond {
 		t := float64(since) / float64(400*time.Millisecond)
 		dots.Translate(float32(math.Sin(t*math.Pi*6)*10*(1-t)), 0)
 		c.Invalidate()
 	}
-	dots.Role(ui.RoleStatus).Label("PIN digits entered").Children(func() {
-		for i := 0; i < pinLength; i++ {
+	dots.Role(ui.RoleStatus).Label("Digits entered").Children(func() {
+		for i := 0; i < length; i++ {
 			d := ui.Box(c).Size(18, 18).Radius(9).Border(2, colInk)
 			if i < typed {
 				d.Background(colInk)

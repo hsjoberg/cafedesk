@@ -17,13 +17,13 @@ func (a *app) settingsView(c *ui.Context) {
 		})
 		resultText(c, a.settings.msg)
 		columns := [][]func(*ui.Context){
-			{a.shopPanel, a.staffPanel},
+			{a.syncPanel, a.shopPanel, a.staffPanel},
 			{a.receiptPrinterPanel, a.backupPanel},
 			{a.kitchenPanel, a.screenPanel},
 		}
 		if w, _ := c.Size(); w < 1200 {
 			columns = [][]func(*ui.Context){
-				{a.shopPanel, a.kitchenPanel, a.staffPanel},
+				{a.syncPanel, a.shopPanel, a.kitchenPanel, a.staffPanel},
 				{a.receiptPrinterPanel, a.backupPanel, a.screenPanel},
 			}
 		}
@@ -54,6 +54,31 @@ func settingRow(c *ui.Context, key, name, value string, muted bool, change func(
 		if button(c, key, "Change", btnOption, false).Height(44).MinHeight(44).PaddingX(14).Clicked() {
 			change()
 		}
+	})
+}
+
+// syncPanel is the till's connection to its admin.
+func (a *app) syncPanel(c *ui.Context) {
+	panel(c, "Admin connection", "The till gets the menu and staff from the admin and sends its sales there, whenever it is online.", func() {
+		if a.token != "" && a.cfg.ShopID != "local" {
+			ui.Text(c, "Connected as "+a.cfg.TerminalCode+" of "+a.cfg.ShopLabel+".").FontWeight(wMedium)
+		}
+		if msg, bad := a.syncSummary(); msg != "" {
+			col := colInkMuted
+			if bad {
+				col = colChili
+			}
+			ui.Text(c, msg).FontSize(fsMeta).TextColor(col)
+		}
+		ui.Row(c).Gap(8).Children(func() {
+			if button(c, "sync-now", "Update now", btnOption, !a.paired() || a.sync.busy).Grow(1).PaddingX(8).Clicked() {
+				a.syncNow()
+			}
+			if button(c, "pair", "Connect again", btnOption, false).Grow(1).PaddingX(8).Clicked() {
+				a.openPairing()
+			}
+		})
+		settingRow(c, "server-url", "The admin's address", a.cfg.ServerURL, true, a.editServerURL)
 	})
 }
 
@@ -190,6 +215,10 @@ func (a *app) kitchenPanel(c *ui.Context) {
 }
 
 func (a *app) staffPanel(c *ui.Context) {
+	if !a.demo {
+		a.staffFromServer(c)
+		return
+	}
 	panel(c, "Staff", "Everyone signs in with their own 4-digit PIN. Managers approve voids, refunds and closing the day.", func() {
 		for _, st := range a.settings.staff {
 			ui.Column(c.Key("staff-"+st.ID)).Gap(8).Padding(12).Background(colPaper).Border(1, colRule).Radius(4).
@@ -251,6 +280,30 @@ func (a *app) staffPanel(c *ui.Context) {
 		}
 		if button(c, "add-staff", "Add a person", btnOption, false).Clicked() {
 			a.addStaffName()
+		}
+	})
+}
+
+// staffFromServer lists the staff of a paired till, who are managed in
+// the admin.
+func (a *app) staffFromServer(c *ui.Context) {
+	panel(c, "Staff", "Staff are managed in the admin, on the Staff page. Changes reach this till when it syncs.", func() {
+		for _, st := range a.settings.staff {
+			if !st.Active {
+				continue
+			}
+			ui.Row(c.Key("staff-"+st.ID)).Gap(8).AlignItems(ui.Baseline).Padding(10, 12).Background(colPaper).
+				Border(1, colRule).Radius(4).Children(func() {
+				ui.Text(c, st.Name).FontWeight(wMedium)
+				role := "Cashier"
+				if st.IsManager() {
+					role = "Manager"
+				}
+				ui.Text(c, role).FontSize(fsMeta).TextColor(colInkMuted)
+				if st.MustChangePIN {
+					ui.Text(c, "chooses a PIN at first sign-in").FontSize(fsMeta).TextColor(colInkMuted)
+				}
+			})
 		}
 	})
 }

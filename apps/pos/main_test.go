@@ -50,15 +50,23 @@ func (p *fakePrinter) text(role string) string {
 	return b.String()
 }
 
-// newTestApp is an app with a database in a temporary directory, a fake
-// printer, and nothing signed in.
+// newTestApp is an app in demo mode, with a database in a temporary
+// directory, a fake printer, and nothing signed in.
 func newTestApp(t *testing.T) (*app, *fakePrinter) {
+	t.Helper()
+	return newTestAppMode(t, true)
+}
+
+// newTestAppMode is newTestApp, in demo mode or not: not, it has no menu or
+// staff until it connects to an admin.
+func newTestAppMode(t *testing.T, demo bool) (*app, *fakePrinter) {
 	t.Helper()
 	dir := t.TempDir()
 	cfg := defaultConfig()
 	cfg.BackupDir = filepath.Join(dir, "backups")
 	cfg.ReceiptPrinter = "Receipt"
 	a := newApp(cfg, dir)
+	a.demo = demo
 	s, err := OpenStore(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("open store: %v", err)

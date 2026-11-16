@@ -1,0 +1,10 @@
+# Railway service settings. Leave the service's root directory as the
+# repository's root: the Dockerfile builds the admin and the server.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/server/Dockerfile"
+
+[deploy]
+healthcheckPath = "/healthz"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"

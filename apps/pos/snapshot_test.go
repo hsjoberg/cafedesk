@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"cafedesk/pkg/money"
 
@@ -115,5 +116,29 @@ func TestSnapshots(t *testing.T) {
 
 		a.screen = screenChecks
 		save(tt, "16-checks")
+
+		// Phase 2: pairing, and a paired till's settings and sync.
+		a.screen = screenSettings
+		a.cfg.ServerURL = "https://cafedesk.up.railway.app"
+		a.pairing = &pairState{code: "5191"}
+		save(tt, "17-pairing")
+		a.pairing = nil
+		a.token, a.cfg.ShopID, a.cfg.ShopLabel, a.cfg.TerminalCode = "token", "shop", "Downtown", "T1"
+		a.sync = syncState{lastOK: time.Date(2026, 11, 16, 20, 6, 0, 0, time.Local), pending: 2}
+		a.settingsDrag.state.Y = 0
+		save(tt, "18-settings-paired")
+		a.sync.err = "can't reach the server: dial tcp: no such host"
+		a.screen = screenOrder
+		save(tt, "19-offline")
+
+		// A new till, connecting.
+		a.demo, a.token, a.cfg.ShopID, a.synced, a.staff = false, "", "local", false, nil
+		a.cfg.ServerURL = "https://cafedesk.up.railway.app"
+		a.sync = syncState{}
+		a.pairing = &pairState{code: "5191"}
+		save(tt, "20-setup")
+		a.pairing = nil
+		a.token, a.cfg.ShopID, a.sync.busy = "token", "shop", true
+		save(tt, "21-setup-fetching")
 	}
 }

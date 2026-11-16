@@ -1,12 +1,24 @@
-openapi: 3.1.0
+openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.1.0
+  version: 0.3.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
-    Phase 0 has only the health check and a ping. Sync, pairing and admin
-    endpoints arrive in Phase 2; the rules they follow are in docs/sync.md
-    (to be written) and PLAN.md.
+
+    The admin signs in with an email and password and gets a session cookie
+    (`cafedesk_session`: HttpOnly, Secure, SameSite=Lax). Requests that change
+    data must be JSON and come from the admin's own origin.
+
+    Money is in fils (1 AED = 100 fils), as integers. IDs are UUIDs. Errors have
+    an `error` object with a `code` a program can check and a `message` a person
+    can read.
+
+    A till (terminal) is paired once with a code shown in the admin, and then
+    sends its device token as `Authorization: Bearer <token>`. It pulls the menu
+    and its shop's staff with `/v1/terminal/changes`, and sends what happened on
+    it (business days, orders, voids, refunds, PIN changes) with
+    `/v1/terminal/events`. Both are safe to repeat: events are applied once, by
+    their IDs.
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -15,11 +27,16 @@ servers:
     variables:
       service:
         default: cafedesk-server
+
+security:
+  - session: []
+
 paths:
   /healthz:
     get:
       operationId: healthz
       summary: Liveness check, polled by Railway.
+      security: []
       responses:
         "200":
           description: The server is up.
@@ -27,11 +44,12 @@ paths:
             text/plain:
               schema:
                 type: string
-                const: "ok\n"
+
   /v1/ping:
     get:
       operationId: ping
       summary: Confirms a client can reach the API, and reports its version and clock.
+      security: []
       responses:
         "200":
           description: The server answered.
@@ -39,19 +57,1239 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Ping"
+
+  /v1/admin/session:
+    post:
+      operationId: signIn
+      summary: Signs in to the admin, setting the session cookie.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignIn"
+      responses:
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: signOut
+      summary: Signs out, ending the session.
+      responses:
+        "204":
+          description: Signed out.
+
+  /v1/admin/me:
+    get:
+      operationId: getMe
+      summary: The signed-in user, their organization and its shops.
+      responses:
+        "200":
+          description: Who is signed in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/catalog:
+    get:
+      operationId: getCatalog
+      summary: The whole menu of the organization.
+      responses:
+        "200":
+          description: The menu.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Catalog"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/categories:
+    post:
+      operationId: createCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Added, at the end.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/Error"
+  /v1/admin/categories/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteCategory
+      summary: Deletes a category. It must have no items left.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /v1/admin/categories/{id}/move:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: moveCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Move"
+      responses:
+        "204":
+          description: Moved.
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/items:
+    post:
+      operationId: createItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemInput"
+      responses:
+        "201":
+          description: Added, at the end of its category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/Error"
+  /v1/admin/items/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Item"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteItem
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/admin/items/{id}/move:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: moveItem
+      summary: Moves an item within its category.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Move"
+      responses:
+        "204":
+          description: Moved.
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/modifier-groups:
+    post:
+      operationId: createModifierGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModifierGroupInput"
+      responses:
+        "201":
+          description: Added, at the end.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModifierGroup"
+        "400":
+          $ref: "#/components/responses/Error"
+  /v1/admin/modifier-groups/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateModifierGroup
+      summary: Saves a group with its modifiers. Modifiers left out are deleted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModifierGroupInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModifierGroup"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteModifierGroup
+      summary: Deletes a group, and takes it off the items that had it.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/Error"
+  /v1/admin/modifier-groups/{id}/move:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: moveModifierGroup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Move"
+      responses:
+        "204":
+          description: Moved.
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/staff:
+    get:
+      operationId: listStaff
+      summary: The till staff of the organization, who sign in to tills with PINs.
+      responses:
+        "200":
+          description: The staff.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Staff"
+    post:
+      operationId: createStaff
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffInput"
+      responses:
+        "201":
+          description: Added. They choose their own PIN at their first sign-in.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /v1/admin/staff/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateStaff
+      summary: Saves a person. A PIN given becomes their new starting PIN.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffInput"
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/terminals:
+    get:
+      operationId: listTerminals
+      summary: The tills of the organization's shops.
+      responses:
+        "200":
+          description: The tills.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Terminal"
+    post:
+      operationId: createTerminal
+      summary: Adds a till to a shop, with a pairing code to enter on it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerminalInput"
+      responses:
+        "201":
+          description: Added.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalPairing"
+        "400":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /v1/admin/terminals/{id}/pairing-code:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      operationId: createPairingCode
+      summary: A new pairing code for a till. Pairing with it replaces the till's device.
+      responses:
+        "200":
+          description: The code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalPairing"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+  /v1/admin/terminals/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    delete:
+      operationId: unpairTerminal
+      summary: Unpairs a till. Its device token stops working at once.
+      responses:
+        "204":
+          description: Unpaired.
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /v1/terminal/pair:
+    post:
+      operationId: pairTerminal
+      summary: Pairs a till with a code from the admin, giving it its device token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairRequest"
+      responses:
+        "200":
+          description: Paired. Keep the token secret; it is shown once.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pairing"
+        "400":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /v1/terminal/changes:
+    get:
+      operationId: getChanges
+      summary: The menu and the shop's staff changed since a version; everything from 0.
+      security:
+        - device: []
+      parameters:
+        - name: since
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        "200":
+          description: The changes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Changes"
+        "401":
+          $ref: "#/components/responses/Error"
+
+  /v1/terminal/events:
+    post:
+      operationId: sendEvents
+      summary: What happened on the till, in the order it happened. Applied once each.
+      security:
+        - device: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventBatch"
+      responses:
+        "200":
+          description: |
+            The events taken, in order. Processing stops at the first event that
+            can't be taken, which `rejected` explains; the till sends it and those
+            after it again later.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventResult"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+
 components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: cafedesk_session
+    device:
+      type: http
+      scheme: bearer
+      description: A till's device token, from pairing.
+
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Error:
+      description: The request failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
   schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              description: For programs, e.g. "invalid", "not_found", "conflict", "unauthorized".
+            message:
+              type: string
+              description: For people, in a sentence.
+            field:
+              type: string
+              description: The input field at fault, if one is.
+
     Ping:
       type: object
       required: [status, version, serverTime]
       properties:
         status:
           type: string
-          const: ok
+          enum: [ok]
         version:
           type: string
-          description: The server build, "dev" when built locally.
         serverTime:
           type: string
           format: date-time
-          description: The server's clock in UTC, to spot a POS whose clock is wrong.
+
+    SignIn:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    Me:
+      type: object
+      required: [user, organization, shops]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        organization:
+          $ref: "#/components/schemas/Organization"
+        shops:
+          type: array
+          items:
+            $ref: "#/components/schemas/Shop"
+
+    User:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [owner, manager]
+
+    Organization:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    Shop:
+      type: object
+      required: [id, name, currency, timezone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        currency:
+          type: string
+        timezone:
+          type: string
+
+    Move:
+      type: object
+      required: [position]
+      properties:
+        position:
+          type: integer
+          description: The new place, from 0. Past the end means last.
+
+    Catalog:
+      type: object
+      required: [version, categories, items, modifierGroups]
+      properties:
+        version:
+          type: integer
+          format: int64
+          description: Goes up with every change to the menu.
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Item"
+        modifierGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModifierGroup"
+
+    CategoryInput:
+      type: object
+      required: [name, color, kitchen]
+      properties:
+        name:
+          type: string
+        nameAr:
+          type: string
+        color:
+          type: string
+          description: The signage band, as "#RRGGBB".
+        kitchen:
+          type: boolean
+          description: New items of the category print on the kitchen ticket.
+    Category:
+      allOf:
+        - $ref: "#/components/schemas/CategoryInput"
+        - type: object
+          required: [id, position, nameAr]
+          properties:
+            id:
+              type: string
+              format: uuid
+            position:
+              type: integer
+
+    ItemInput:
+      type: object
+      required: [categoryId, name, priceFils, kitchen, modifierGroupIds]
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        nameAr:
+          type: string
+        priceFils:
+          type: integer
+          format: int64
+          minimum: 0
+        kitchen:
+          type: boolean
+          description: Prints on the kitchen ticket.
+        modifierGroupIds:
+          type: array
+          description: The item's option groups, in order.
+          items:
+            type: string
+            format: uuid
+    Item:
+      allOf:
+        - $ref: "#/components/schemas/ItemInput"
+        - type: object
+          required: [id, position, nameAr]
+          properties:
+            id:
+              type: string
+              format: uuid
+            position:
+              type: integer
+
+    ModifierInput:
+      type: object
+      required: [name, priceDeltaFils, isDefault]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Set to keep an existing modifier; left out for a new one.
+        name:
+          type: string
+        nameAr:
+          type: string
+        priceDeltaFils:
+          type: integer
+          format: int64
+          description: Added to the item's price.
+        isDefault:
+          type: boolean
+          description: Chosen when the item is tapped.
+    Modifier:
+      allOf:
+        - $ref: "#/components/schemas/ModifierInput"
+        - type: object
+          required: [id, position, nameAr]
+          properties:
+            position:
+              type: integer
+
+    ModifierGroupInput:
+      type: object
+      required: [name, multiple, modifiers]
+      properties:
+        name:
+          type: string
+        nameAr:
+          type: string
+        multiple:
+          type: boolean
+          description: Several may be chosen, as extras; else exactly one, as a sugar level.
+        modifiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModifierInput"
+    ModifierGroup:
+      type: object
+      required: [id, name, nameAr, multiple, position, modifiers]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        nameAr:
+          type: string
+        multiple:
+          type: boolean
+        position:
+          type: integer
+        modifiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Modifier"
+
+    StaffRole:
+      type: string
+      enum: [cashier, manager]
+      description: Managers also approve voids, refunds and closing the day on the till.
+
+    StaffInput:
+      type: object
+      required: [name, role, shopIds, active]
+      properties:
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/StaffRole"
+        shopIds:
+          type: array
+          description: The shops whose tills they can sign in to.
+          items:
+            type: string
+            format: uuid
+        active:
+          type: boolean
+          description: Whether they can sign in.
+        pin:
+          type: string
+          description: |
+            A starting PIN of 4 digits: required for a new person, and on a save
+            it replaces their PIN. They choose their own at their next sign-in.
+    Staff:
+      type: object
+      required: [id, name, role, shopIds, active, mustChangePin]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/StaffRole"
+        shopIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        active:
+          type: boolean
+        mustChangePin:
+          type: boolean
+          description: They still have a starting PIN.
+
+    TerminalInput:
+      type: object
+      required: [shopId]
+      properties:
+        shopId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Where it stands, e.g. "Front counter".
+    Terminal:
+      type: object
+      required: [id, shopId, code, name, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        shopId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          description: Prefixes its order numbers, e.g. "T1".
+        name:
+          type: string
+        status:
+          type: string
+          enum: [waiting, paired, unpaired]
+          description: Waiting for its first pairing, paired, or unpaired in the admin.
+        pairedAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+          description: When it last reached the server.
+    TerminalPairing:
+      type: object
+      required: [terminal, code, expiresAt]
+      properties:
+        terminal:
+          $ref: "#/components/schemas/Terminal"
+        code:
+          type: string
+          description: 8 digits to enter on the till, usable once.
+        expiresAt:
+          type: string
+          format: date-time
+
+    PairRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+    Pairing:
+      type: object
+      required: [token, organization, shop, terminal]
+      properties:
+        token:
+          type: string
+        organization:
+          $ref: "#/components/schemas/Organization"
+        shop:
+          $ref: "#/components/schemas/Shop"
+        terminal:
+          $ref: "#/components/schemas/Terminal"
+
+    Changes:
+      type: object
+      required: [version, full, categories, items, modifierGroups, staff]
+      description: |
+        Rows changed after `since`, deleted ones with `archived` set. When `full`
+        is set (since was 0), they are the whole menu and staff, and anything the
+        till has that isn't among them is gone.
+      properties:
+        version:
+          type: integer
+          format: int64
+          description: Ask for changes since this next time.
+        full:
+          type: boolean
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncCategory"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncItem"
+        modifierGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncModifierGroup"
+        staff:
+          type: array
+          items:
+            $ref: "#/components/schemas/SyncStaff"
+    SyncCategory:
+      type: object
+      required: [id, name, nameAr, color, position, kitchen, archived]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        nameAr:
+          type: string
+        color:
+          type: string
+        position:
+          type: integer
+        kitchen:
+          type: boolean
+        archived:
+          type: boolean
+    SyncItem:
+      type: object
+      required: [id, categoryId, name, nameAr, priceFils, position, kitchen, modifierGroupIds, archived]
+      properties:
+        id:
+          type: string
+          format: uuid
+        categoryId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        nameAr:
+          type: string
+        priceFils:
+          type: integer
+          format: int64
+        position:
+          type: integer
+        kitchen:
+          type: boolean
+        modifierGroupIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        archived:
+          type: boolean
+    SyncModifierGroup:
+      type: object
+      required: [id, name, nameAr, multiple, position, archived, modifiers]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        nameAr:
+          type: string
+        multiple:
+          type: boolean
+        position:
+          type: integer
+        archived:
+          type: boolean
+        modifiers:
+          type: array
+          description: All of the group's modifiers, deleted ones archived.
+          items:
+            $ref: "#/components/schemas/SyncModifier"
+    SyncModifier:
+      type: object
+      required: [id, name, nameAr, priceDeltaFils, isDefault, position, archived]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        nameAr:
+          type: string
+        priceDeltaFils:
+          type: integer
+          format: int64
+        isDefault:
+          type: boolean
+        position:
+          type: integer
+        archived:
+          type: boolean
+    SyncStaff:
+      type: object
+      required: [id, name, role, pinHash, mustChangePin, active]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/StaffRole"
+        pinHash:
+          type: string
+          description: The PIN's Argon2id hash, which the till checks PINs against.
+        mustChangePin:
+          type: boolean
+        active:
+          type: boolean
+          description: False for someone turned off, or no longer on this shop's tills.
+
+    EventBatch:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/Event"
+    EventResult:
+      type: object
+      required: [accepted]
+      properties:
+        accepted:
+          type: array
+          description: The seq of each event taken.
+          items:
+            type: integer
+            format: int64
+        rejected:
+          $ref: "#/components/schemas/EventRejection"
+    EventRejection:
+      type: object
+      required: [seq, message]
+      properties:
+        seq:
+          type: integer
+          format: int64
+        message:
+          type: string
+    Event:
+      type: object
+      required: [seq, type]
+      description: One thing that happened on the till; the field named by `type` holds it.
+      properties:
+        seq:
+          type: integer
+          format: int64
+          description: The till's number for the event, increasing.
+        type:
+          type: string
+          enum: [business_day, order, order_void, refund, staff_pin]
+        businessDay:
+          $ref: "#/components/schemas/BusinessDayEvent"
+        order:
+          $ref: "#/components/schemas/OrderEvent"
+        orderVoid:
+          $ref: "#/components/schemas/OrderVoidEvent"
+        refund:
+          $ref: "#/components/schemas/RefundEvent"
+        staffPin:
+          $ref: "#/components/schemas/StaffPinEvent"
+    BusinessDayEvent:
+      type: object
+      required: [id, date, openedAt, openedBy, openedByName, openingFloatFils]
+      description: A day as it stands, opened or closed.
+      properties:
+        id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          description: The local date it was opened on, YYYY-MM-DD.
+        openedAt:
+          type: string
+          format: date-time
+        openedBy:
+          type: string
+          format: uuid
+        openedByName:
+          type: string
+        openingFloatFils:
+          type: integer
+          format: int64
+        closedAt:
+          type: string
+          format: date-time
+        closedBy:
+          type: string
+          format: uuid
+        closedByName:
+          type: string
+        countedCashFils:
+          type: integer
+          format: int64
+    OrderEvent:
+      type: object
+      required: [id, businessDayId, number, code, createdAt, staffId, staffName, totalFils, paymentMethod,
+        tenderedFils, changeFils, lines]
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessDayId:
+          type: string
+          format: uuid
+        number:
+          type: integer
+        code:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        staffId:
+          type: string
+          format: uuid
+        staffName:
+          type: string
+        totalFils:
+          type: integer
+          format: int64
+        paymentMethod:
+          $ref: "#/components/schemas/PaymentMethod"
+        tenderedFils:
+          type: integer
+          format: int64
+        changeFils:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderLineEvent"
+    PaymentMethod:
+      type: string
+      enum: [cash, card]
+    OrderLineEvent:
+      type: object
+      required: [id, itemId, name, qty, unitPriceFils, lineTotalFils, kitchen, modifiers]
+      properties:
+        id:
+          type: string
+          format: uuid
+        itemId:
+          type: string
+          description: The menu item's ID, as the till had it.
+        name:
+          type: string
+        qty:
+          type: integer
+        unitPriceFils:
+          type: integer
+          format: int64
+          description: With its modifiers.
+        lineTotalFils:
+          type: integer
+          format: int64
+        kitchen:
+          type: boolean
+        modifiers:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderLineModifierEvent"
+    OrderLineModifierEvent:
+      type: object
+      required: [groupId, groupName, modifierId, name, priceDeltaFils, isDefault]
+      properties:
+        groupId:
+          type: string
+        groupName:
+          type: string
+        modifierId:
+          type: string
+        name:
+          type: string
+        priceDeltaFils:
+          type: integer
+          format: int64
+        isDefault:
+          type: boolean
+    OrderVoidEvent:
+      type: object
+      required: [orderId, voidedAt, voidedBy, voidedByName, reason]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        voidedAt:
+          type: string
+          format: date-time
+        voidedBy:
+          type: string
+          format: uuid
+        voidedByName:
+          type: string
+        reason:
+          type: string
+    RefundEvent:
+      type: object
+      required: [id, orderId, businessDayId, createdAt, staffId, staffName, approvedBy, approvedByName, reason,
+        method, totalFils, lines]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        businessDayId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        staffId:
+          type: string
+          format: uuid
+        staffName:
+          type: string
+        approvedBy:
+          type: string
+          format: uuid
+        approvedByName:
+          type: string
+        reason:
+          type: string
+        method:
+          $ref: "#/components/schemas/PaymentMethod"
+        totalFils:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/RefundLineEvent"
+    RefundLineEvent:
+      type: object
+      required: [orderLineId, qty, amountFils]
+      properties:
+        orderLineId:
+          type: string
+          format: uuid
+        qty:
+          type: integer
+        amountFils:
+          type: integer
+          format: int64
+    StaffPinEvent:
+      type: object
+      required: [staffId, previousPinHash, pinHash, changedAt]
+      description: |
+        A PIN chosen at the till. It is taken only if the person's PIN is still
+        previousPinHash: a starting PIN set in the admin meanwhile wins.
+      properties:
+        staffId:
+          type: string
+          format: uuid
+        previousPinHash:
+          type: string
+          description: The hash of the PIN it replaces, as the till had it.
+        pinHash:
+          type: string
+        changedAt:
+          type: string
+          format: date-time

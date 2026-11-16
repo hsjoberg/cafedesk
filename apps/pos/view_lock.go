@@ -13,6 +13,8 @@ func (a *app) view(c *ui.Context) {
 	c.SetTheme(a.theme)
 	ui.Box(c).Fill().Children(func() {
 		switch {
+		case a.needsSetup():
+			a.setupView(c)
 		case a.staff == nil:
 			a.lockView(c)
 		case a.pinChange != nil && a.pinChange.forced:
@@ -35,6 +37,9 @@ func (a *app) view(c *ui.Context) {
 		}
 		if a.approval != nil {
 			overlay(c, func() { a.approvalPanel(c) })
+		}
+		if a.pairing != nil && !a.needsSetup() {
+			overlay(c, func() { a.pairPanel(c) })
 		}
 		if a.keyboard != nil {
 			a.keyboardView(c)
@@ -167,16 +172,103 @@ func (a *app) approvalPanel(c *ui.Context) {
 		})
 }
 
+// setupView connects a new till to its admin: nothing else works until it
+// has, and has fetched the menu and staff.
+func (a *app) setupView(c *ui.Context) {
+	connected := a.token != "" && a.cfg.ShopID != "local"
+	if !connected && a.pairing == nil {
+		a.pairing = &pairState{}
+	}
+	ui.Row(c).Fill().Padding(32).Gap(72).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+		ui.Column(c).Width(380).Gap(10).Children(func() {
+			ui.Text(c, "Cafedesk").FontSize(fsTotal).FontWeight(wBold)
+			ui.Text(c, "Connect this till to your admin.").FontSize(fsItem).FontWeight(wMedium)
+			ui.Text(c, "It gets the menu and staff from the admin, and sends its sales there. "+
+				"When the internet is down it keeps selling, and sends them later.").TextColor(colInkMuted)
+		})
+		ui.Column(c).Width(460).Background(colTile).Radius(10).Padding(28).Gap(16).Children(func() {
+			if connected {
+				ui.Text(c, "Connected as "+a.cfg.TerminalCode+" of "+a.cfg.ShopLabel+".").FontSize(fsItem).FontWeight(wMedium)
+				if a.sync.busy || a.sync.err == "" {
+					ui.Text(c, "Getting the menu and staff from the admin.").TextColor(colInkMuted)
+					return
+				}
+				ui.Text(c, "Couldn't get the menu and staff: "+a.sync.err).TextColor(colChili)
+				if button(c, "setup-retry", "Try again", btnInk, false).Clicked() {
+					a.syncNow()
+				}
+				return
+			}
+			settingRow(c, "setup-address", "The admin's address", a.cfg.ServerURL, false, a.editServerURL)
+			ui.Box(c).Height(1).Background(colRule)
+			ui.Text(c, "Code from the admin").FontSize(fsMeta).TextColor(colInkMuted)
+			ui.Text(c, "In the admin, open Tills, choose Add a till, and type the code it shows.").FontSize(fsMeta)
+			p := a.pairing
+			ui.Column(c).AlignItems(ui.Center).Gap(14).Children(func() {
+				codePad(c, "pair-", pairCodeLength, len(p.code), time.Time{}, p.busy, a.pairKey)
+				msg, col := p.err, colChili
+				if p.busy {
+					msg, col = "Connecting.", colInkMuted
+				}
+				if msg == "" {
+					msg = a.settings.msg.text
+				}
+				ui.Text(c, msg).FontSize(fsMeta).TextColor(col).TextAlign(ui.Center).MinHeight(20)
+			})
+		})
+	})
+}
+
+// editServerURL types the admin's address on the keyboard.
+func (a *app) editServerURL() {
+	a.keyboard = &keyboard{title: "The admin's address, such as https://cafedesk.up.railway.app", text: a.cfg.ServerURL, url: true,
+		done: func(s string) {
+			if s == "" {
+				return
+			}
+			if err := checkServerURL(s); err != nil {
+				a.settings.msg = errResult("Address not changed: ", err)
+				return
+			}
+			a.cfg.ServerURL = s
+			a.saveConfig()
+			a.settings.msg = result{}
+		}}
+}
+
+// pairPanel takes a new code from the admin, to connect again, as after the
+// till was disconnected in the admin.
+func (a *app) pairPanel(c *ui.Context) {
+	p := a.pairing
+	ui.Column(c).Width(460).Background(colTile).Radius(10).Padding(28).Gap(14).AlignItems(ui.Center).
+		Children(func() {
+			ui.Text(c, "Connect with a new code").FontSize(fsItem).FontWeight(wMedium)
+			ui.Text(c, "In the admin, open Tills, choose this till, and show a new code. Type its 8 digits.").
+				FontSize(fsMeta).TextColor(colInkMuted).TextAlign(ui.Center)
+			codePad(c, "pair-", pairCodeLength, len(p.code), time.Time{}, p.busy, a.pairKey)
+			msg, col := p.err, colChili
+			if p.busy {
+				msg, col = "Connecting.", colInkMuted
+			}
+			ui.Text(c, msg).FontSize(fsMeta).TextColor(col).TextAlign(ui.Center).MinHeight(20)
+			if button(c, "pair-cancel", "Cancel", btnOption, p.busy).FillWidth().Clicked() {
+				a.pairing = nil
+			}
+		})
+}
+
 // keyboard is text being typed on the on-screen keyboard: the POS has no
 // other.
 type keyboard struct {
 	title string
 	text  string
 	shift bool
+	url   bool // a web address: no capitals, and the keys addresses need
 	done  func(string)
 }
 
 var keyRows = []string{"1234567890", "qwertyuiop", "asdfghjkl'", "zxcvbnm,.-"}
+var urlKeyRows = []string{"1234567890", "qwertyuiop", "asdfghjkl_", "zxcvbnm.:/-"}
 
 func (a *app) keyboardView(c *ui.Context) {
 	k := a.keyboard
@@ -188,8 +280,12 @@ func (a *app) keyboardView(c *ui.Context) {
 					ui.Text(c, k.text).FontSize(fsKey)
 					ui.Box(c).Width(2).Height(28).Background(colInk).Margin(0, 0, 0, 2) // the caret
 				})
-				upper := k.shift || k.text == "" || strings.HasSuffix(k.text, " ")
-				for r, row := range keyRows {
+				upper := k.shift || (!k.url && (k.text == "" || strings.HasSuffix(k.text, " ")))
+				rows := keyRows
+				if k.url {
+					rows = urlKeyRows
+				}
+				for r, row := range rows {
 					ui.Row(c).Gap(6).Justify(ui.Center).Children(func() {
 						for _, ch := range row {
 							s := string(ch)

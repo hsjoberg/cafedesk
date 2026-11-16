@@ -147,6 +147,7 @@ func (a *app) confirmRefund() {
 				doc.Kick = ref.Method == payCash && a.cfg.OpenDrawer
 				a.enqueuePrint(roleReceipt, "Refund slip "+order.Code, doc, nil)
 				a.loadOrders(order.ID)
+				a.syncNow()
 			}
 		})
 	})
@@ -180,6 +181,7 @@ func (a *app) confirmVoid() {
 				}
 				a.voiding = nil
 				a.loadOrders(id)
+				a.syncNow()
 			}
 		})
 	})
@@ -243,6 +245,7 @@ func (a *app) closeDay() {
 				}
 				a.enqueuePrint(roleReceipt, "Day closed", reportDoc(r, a.cfg), nil)
 				a.backupNow()
+				a.syncNow()
 				a.day, a.report = nil, nil
 				a.counted = amountEntry{}
 				a.screen = screenOrder

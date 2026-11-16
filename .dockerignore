@@ -1,0 +1,7 @@
+.git
+**/node_modules
+apps/pos
+apps/server/web/dist
+docs
+**/*.exe
+**/testdata

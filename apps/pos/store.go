@@ -98,6 +98,15 @@ var schema = [][]string{
 		`CREATE INDEX refunds_order ON refunds(order_id)`,
 		`CREATE TABLE checks (id INTEGER PRIMARY KEY AUTOINCREMENT, note TEXT NOT NULL, created_at TEXT NOT NULL)`,
 	},
+	// 2: Phase 2, syncing with the server.
+	{
+		`ALTER TABLE modifier_groups ADD COLUMN active INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE modifiers ADD COLUMN active INTEGER NOT NULL DEFAULT 1`,
+		// 'local' for staff made on this till, 'server' for staff from the admin.
+		`ALTER TABLE staff ADD COLUMN source TEXT NOT NULL DEFAULT 'local'`,
+		// What an event must carry as it was, such as the PIN a change replaced.
+		`ALTER TABLE outbox ADD COLUMN payload TEXT`,
+	},
 }
 
 // OpenStore opens or creates pos.db in dir.
@@ -176,6 +185,40 @@ func (s *Store) migrate(ctx context.Context) error {
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
+// HasHistory reports whether the till holds any days or sales.
+func (s *Store) HasHistory(ctx context.Context) (bool, error) {
+	rows, err := s.query(ctx, "SELECT EXISTS (SELECT 1 FROM business_days) OR EXISTS (SELECT 1 FROM orders)")
+	return firstInt(rows) == 1, err
+}
+
+// StartFresh sets the database aside as pos-<label>-<date>.db, beside it,
+// and starts an empty one in its place: a till used for trying out keeps
+// its test sales there, out of the admin's reports. It returns where they
+// went.
+func (s *Store) StartFresh(ctx context.Context, label string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.db.Close(); err != nil {
+		return "", err
+	}
+	aside := strings.TrimSuffix(s.path, ".db") + "-" + label + "-" + time.Now().Format("20060102-150405") + ".db"
+	var moveErr error
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		if _, err := os.Stat(s.path + suffix); err == nil && moveErr == nil {
+			moveErr = os.Rename(s.path+suffix, aside+suffix)
+		}
+	}
+	db, err := sqlite.Open(ctx, s.path, sqlite.OpenOptions{})
+	if err != nil {
+		return "", fmt.Errorf("open %s: %w", s.path, err)
+	}
+	s.db = db
+	if moveErr != nil {
+		return "", fmt.Errorf("set the old sales aside: %w", moveErr)
+	}
+	return aside, s.migrate(ctx)
+}
+
 // Path is the database file.
 func (s *Store) Path() string { return s.path }
 
@@ -213,13 +256,14 @@ func outboxIfChanged(entity, id string, at time.Time) sqlite.Statement {
 
 // The catalog.
 
-// LoadCatalog reads the active menu. A new database gets the demo menu.
-func (s *Store) LoadCatalog(ctx context.Context) (*Catalog, error) {
+// LoadCatalog reads the active menu. In demo mode, a new database gets the
+// demo menu; otherwise the menu comes from the admin.
+func (s *Store) LoadCatalog(ctx context.Context, demo bool) (*Catalog, error) {
 	rows, err := s.query(ctx, "SELECT COUNT(*) FROM categories")
 	if err != nil {
 		return nil, err
 	}
-	if firstInt(rows) == 0 {
+	if demo && firstInt(rows) == 0 {
 		if err := s.SaveCatalog(ctx, demoCatalog()); err != nil {
 			return nil, fmt.Errorf("seed the menu: %w", err)
 		}
@@ -234,7 +278,7 @@ func (s *Store) LoadCatalog(ctx context.Context) (*Catalog, error) {
 		c.Categories = append(c.Categories, Category{ID: str(r[0]), Name: str(r[1]), NameAR: str(r[2]),
 			Color: str(r[3]), Position: int(i64(r[4])), Kitchen: i64(r[5]) != 0})
 	}
-	rows, err = s.query(ctx, "SELECT id, name, name_ar, multiple, position FROM modifier_groups ORDER BY position")
+	rows, err = s.query(ctx, "SELECT id, name, name_ar, multiple, position FROM modifier_groups WHERE active = 1 ORDER BY position")
 	if err != nil {
 		return nil, err
 	}
@@ -243,12 +287,15 @@ func (s *Store) LoadCatalog(ctx context.Context) (*Catalog, error) {
 			Multiple: i64(r[3]) != 0, Position: int(i64(r[4]))}
 	}
 	rows, err = s.query(ctx, `SELECT id, group_id, name, name_ar, price_delta_fils, is_default, position
-		FROM modifiers ORDER BY group_id, position`)
+		FROM modifiers WHERE active = 1 ORDER BY group_id, position`)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range rows.Values {
-		g := c.Groups[str(r[1])]
+		g, ok := c.Groups[str(r[1])]
+		if !ok {
+			continue // of a deleted group
+		}
 		g.Modifiers = append(g.Modifiers, Modifier{ID: str(r[0]), GroupID: str(r[1]), Name: str(r[2]),
 			NameAR: str(r[3]), Delta: money.Fils(i64(r[4])), Default: i64(r[5]) != 0, Position: int(i64(r[6]))})
 		c.Groups[str(r[1])] = g
@@ -259,7 +306,9 @@ func (s *Store) LoadCatalog(ctx context.Context) (*Catalog, error) {
 	}
 	groups := map[string][]string{}
 	for _, r := range links.Values {
-		groups[str(r[0])] = append(groups[str(r[0])], str(r[1]))
+		if _, ok := c.Groups[str(r[1])]; ok {
+			groups[str(r[0])] = append(groups[str(r[0])], str(r[1]))
+		}
 	}
 	rows, err = s.query(ctx, `SELECT i.id, i.category_id, i.name, i.name_ar, i.price_fils, i.position, i.kitchen
 		FROM items i JOIN categories c ON c.id = i.category_id

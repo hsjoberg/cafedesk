@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -25,6 +26,7 @@ func main() {
 	}
 	cfg, cfgErr := loadConfig(dir)
 	a := newApp(cfg, dir)
+	a.demo = os.Getenv("CAFEDESK_DEMO") == "1"
 	if cfgErr != nil {
 		a.cfgErr = "Settings could not be read, so defaults are in use: " + cfgErr.Error()
 	}
@@ -48,7 +50,10 @@ func main() {
 			win.SetFullScreen(true)
 		}
 		a.attach(win)
+		a.secrets = mygo.Secrets
+		a.loadToken()
 		a.loadDay() // the lock screen says whether a day is open
+		a.syncNow()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

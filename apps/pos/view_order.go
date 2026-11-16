@@ -61,6 +61,14 @@ func (a *app) topBar(c *ui.Context) {
 			a.categoryTab(c, cat, busy)
 		}
 		ui.Spacer(c)
+		switch {
+		case a.paired() && a.sync.err != "":
+			ui.Text(c, "Offline").FontSize(fsMeta).FontWeight(wMedium).TextColor(colChili)
+		case a.sync.unpaired:
+			ui.Text(c, "Disconnected").FontSize(fsMeta).FontWeight(wMedium).TextColor(colChili)
+		case a.sync.rejected != "":
+			ui.Text(c, "Not sending").FontSize(fsMeta).FontWeight(wMedium).TextColor(colChili)
+		}
 		now := c.Now()
 		ui.Text(c, now.Format("15:04")).FontFeatures("tnum").TextColor(colInkMuted).MarginX(12)
 		c.After(time.Until(now.Truncate(time.Minute).Add(time.Minute)))

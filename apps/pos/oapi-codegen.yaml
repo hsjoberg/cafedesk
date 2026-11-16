@@ -1,0 +1,6 @@
+# Generates the API's types from api/openapi.yaml for the till's sync:
+#   go generate ./...
+package: api
+output: api/api.gen.go
+generate:
+  models: true

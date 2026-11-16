@@ -1,0 +1,613 @@
+/* The tokens of docs/design.md, as the till uses them. */
+
+@font-face {
+  font-family: "Readex Pro";
+  src: url("/fonts/ReadexPro-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Readex Pro";
+  src: url("/fonts/ReadexPro-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Readex Pro";
+  src: url("/fonts/ReadexPro-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --concrete: #cdd2c9;
+  --tile: #f4f5f1;
+  --tile-pressed: #e2e6de;
+  --paper: #ffffff;
+  --ink: #213a31;
+  --ink-muted: #56675f;
+  --rule: #aeb7aa;
+  --chili: #c23b2e;
+  --scrim: rgb(33 58 49 / 0.18);
+
+  --fs-meta: 14px;
+  --fs-body: 16px;
+  --fs-item: 18px;
+  --fs-price: 21px;
+  --fs-key: 24px;
+  --fs-total: 36px;
+
+  --editor-width: 384px;
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--concrete);
+  color: var(--ink);
+  font-family: "Readex Pro", system-ui, sans-serif;
+  font-size: var(--fs-body);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  line-height: 1.2;
+}
+
+.muted {
+  color: var(--ink-muted);
+}
+.meta {
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+.error {
+  color: var(--chili);
+  font-size: var(--fs-meta);
+}
+
+/* Buttons: what each does is in its words; the kind says how much. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--tile);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(2px);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.btn-ink {
+  background: var(--ink);
+  color: var(--paper);
+}
+.btn-ink:hover:not(:disabled) {
+  background: #152821;
+}
+.btn-option {
+  background: var(--paper);
+  border-color: var(--rule);
+}
+.btn-option:hover:not(:disabled),
+.btn-plain:hover:not(:disabled) {
+  background: var(--tile-pressed);
+}
+.btn-danger {
+  background: transparent;
+  color: var(--chili);
+  padding: 0 8px;
+}
+.btn-danger.armed {
+  background: var(--chili);
+  color: var(--paper);
+  padding: 0 18px;
+}
+.btn-small {
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: var(--fs-meta);
+}
+
+/* Fields: paper, so typed text sits on what it becomes. */
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+.field > span:first-child {
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+}
+.input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: var(--fs-item);
+}
+.input[aria-invalid="true"] {
+  border-color: var(--chili);
+}
+.input[dir="rtl"] {
+  text-align: right;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.check input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--ink);
+  margin: 0;
+  flex: none;
+}
+
+/* The top bar. */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  flex-wrap: wrap;
+}
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-right: 12px;
+}
+.brand strong {
+  font-size: var(--fs-item);
+}
+.nav {
+  display: flex;
+  gap: 4px;
+}
+.nav a {
+  padding: 10px 16px;
+  border-radius: 4px;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 500;
+  box-shadow: inset 0 -4px 0 transparent;
+}
+.nav a:hover {
+  background: var(--tile-pressed);
+}
+.nav a[aria-current="page"] {
+  background: var(--tile);
+  box-shadow: inset 0 -4px 0 var(--ink);
+}
+.spacer {
+  flex: 1;
+}
+
+/* Two zones, as on the till: the wall, and the editor where the receipt
+   strip would be. */
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--editor-width);
+  align-items: start;
+  min-height: calc(100vh - 72px);
+}
+.wall {
+  padding: 4px 20px 24px;
+  min-width: 0;
+}
+.editor {
+  position: sticky;
+  top: 16px;
+  margin: 4px 20px 24px 0;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  background: var(--tile);
+  border-radius: 10px;
+  box-shadow: 0 2px 12px var(--scrim);
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+.editor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.editor-head h2 {
+  font-size: var(--fs-key);
+  flex: 1;
+}
+.editor .close {
+  display: none;
+}
+.editor-empty {
+  color: var(--ink-muted);
+}
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.status {
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+  min-height: 20px;
+}
+.banner {
+  padding: 12px 14px;
+  border-radius: 4px;
+  background: var(--paper);
+  border-left: 4px solid var(--chili);
+  color: var(--chili);
+  font-size: var(--fs-meta);
+}
+
+/* Category tabs, as on the till: the chosen one is a tile with its band. */
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 14px;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: inset 0 -4px 0 transparent;
+}
+.tab:hover {
+  background: var(--tile-pressed);
+}
+.tab[aria-selected="true"] {
+  background: var(--tile);
+  box-shadow: inset 0 -4px 0 var(--band);
+}
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--band);
+  flex: none;
+}
+
+.wall-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.wall-head h1 {
+  font-size: var(--fs-key);
+  margin-right: 4px;
+}
+
+/* Tiles: the till's, as the till draws them. */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  min-height: 170px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--tile);
+  text-align: left;
+  cursor: pointer;
+}
+.tile:hover {
+  background: var(--tile-pressed);
+}
+.tile[aria-pressed="true"] {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+.tile.draft {
+  outline: 3px dashed var(--ink);
+  outline-offset: 2px;
+}
+.tile .band {
+  height: 8px;
+  background: var(--band);
+  flex: none;
+}
+.tile .body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px 12px;
+}
+.tile .name {
+  font-size: var(--fs-item);
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.tile .name-ar {
+  color: var(--ink-muted);
+  direction: rtl;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile .price {
+  margin-top: auto;
+  font-size: var(--fs-price);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.tile .groups {
+  font-size: var(--fs-meta);
+  color: var(--ink-muted);
+}
+/* The editor's own preview tile: on phones, where the sheet covers the wall. */
+.narrow-preview {
+  display: none;
+}
+.empty {
+  padding: 24px;
+  border: 1px dashed var(--rule);
+  border-radius: 4px;
+  color: var(--ink-muted);
+}
+
+/* Color choice for a category's band. */
+
+.swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.swatches button {
+  width: 44px;
+  height: 44px;
+  border-radius: 4px;
+  border: 0;
+  background: var(--band);
+  cursor: pointer;
+}
+.swatches button[aria-checked="true"] {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Option groups. */
+
+.list {
+  display: grid;
+  gap: 2px;
+  background: var(--tile);
+  border-radius: 4px;
+  padding: 6px;
+}
+.list button {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.list button:hover {
+  background: var(--tile-pressed);
+}
+.list button[aria-pressed="true"] {
+  background: var(--paper);
+}
+.list strong {
+  font-weight: 500;
+  font-size: var(--fs-item);
+}
+.mod {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+.mod .input {
+  font-size: var(--fs-body);
+  min-height: 44px;
+}
+.mod-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.lede {
+  margin-top: 0;
+  max-width: 62ch;
+}
+fieldset.bare {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.input.pin {
+  max-width: 160px;
+  font-size: var(--fs-key);
+  letter-spacing: 0.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A pairing code, to read off and type on a till. */
+.code-panel {
+  display: grid;
+  gap: 6px;
+  padding: 16px 20px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+.code-panel.done {
+  border-color: var(--ink);
+  box-shadow: inset 4px 0 0 var(--ink);
+}
+.code-panel p {
+  margin: 0;
+}
+.code-panel .waiting {
+  color: var(--ink);
+}
+.code {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.banner a {
+  color: inherit;
+  font-weight: 500;
+}
+
+/* The sign-in page. */
+
+.signin {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.signin form {
+  width: min(420px, 100%);
+  background: var(--tile);
+  border-radius: 10px;
+  padding: 32px 28px;
+  display: grid;
+  gap: 18px;
+}
+.signin h1 {
+  font-size: var(--fs-total);
+  font-weight: 700;
+}
+
+.loading {
+  padding: 24px;
+  color: var(--ink-muted);
+}
+
+/* Phones and narrow windows: one column, and the editor as a sheet. */
+
+@media (max-width: 899px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .wall {
+    padding: 4px 16px 24px;
+  }
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tile {
+    min-height: 150px;
+  }
+  .topbar {
+    padding: 12px 16px;
+    gap: 12px;
+  }
+  .editor {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    max-height: none;
+    border-radius: 0;
+    z-index: 10;
+    padding: 20px 16px 32px;
+  }
+  .editor.closed {
+    display: none;
+  }
+  .editor .close {
+    display: inline-flex;
+  }
+  .narrow-preview {
+    display: grid;
+    grid-template-columns: minmax(0, 220px);
+  }
+  .narrow-preview .tile {
+    background: var(--paper);
+    min-height: 130px;
+  }
+  .topbar .who {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+}

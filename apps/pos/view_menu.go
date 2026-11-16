@@ -17,6 +17,13 @@ func (a *app) tillMenu(c *ui.Context) {
 					FontSize(fsMeta).TextColor(colInkMuted)
 			}
 		})
+		if msg, bad := a.syncSummary(); msg != "" {
+			col := colInkMuted
+			if bad {
+				col = colChili
+			}
+			ui.Text(c, msg).FontSize(fsMeta).TextColor(col)
+		}
 		ui.Grid(c).Columns(2).Gap(10).Children(func() {
 			if optionRow(c, "menu-orders", "Orders", "Reprint, refund or void an order.").Clicked() {
 				a.openOrders()

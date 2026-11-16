@@ -5,6 +5,10 @@ syncs yet (Phase 2).
 
 ## First run
 
+From Phase 2 on, a new till first connects to its admin and gets its staff from
+there; see [phase2.md](phase2.md). What follows is the till's own behavior, and
+demo mode (`CAFEDESK_DEMO=1`).
+
 1. Open **Cafedesk POS**. If a Phase 0 database is there, it is renamed to
    `pos-phase0-<date>.db` in `%APPDATA%\Cafedesk POS` and a fresh one starts.
 2. The till opens locked. Sign in with **1234**: that's the **Owner**, a

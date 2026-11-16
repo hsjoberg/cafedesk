@@ -21,6 +21,7 @@ type Config struct {
 	TerminalID string `json:"terminalId"`
 
 	ServerURL string `json:"serverUrl"`
+	ShopLabel string `json:"shopLabel"` // the shop's name in the admin, once paired
 
 	ReceiptFooter string `json:"receiptFooter"` // the last line of a receipt; "Thank you" when empty
 

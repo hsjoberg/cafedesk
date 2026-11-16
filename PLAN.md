@@ -26,6 +26,7 @@ Last updated: 2026-11-16.
 | Where it runs | **Development is always local:** Postgres via `docker compose`, the server with `go run`, the POS pointed at `http://localhost:8080`. **Production deploys to Railway.** **Fully local production stays a supported option:** server and Postgres on a machine in the shop (the POS PC itself or a second one), reached over the LAN. The code is the same for every setup, and nothing may depend on Railway. |
 | Tenancy | `org_id` on every table; `shop_id` on every shop-scoped table. One org (the company) and one shop to begin with. |
 | Terminals | Multiple terminals per shop are supported in the model. Today: **one terminal**. |
+| Till modes | **Always connected to an admin**, set up once with a code at first start; offline after that, sending when back online. No standalone mode (it would need menu editing on the till). A demo mode for trying the till exists for developers only (`CAFEDESK_DEMO=1`), and its sales never reach the admin. |
 | Printers | **Two network printers**: a receipt printer at the desk, and a kitchen printer (currently not connected). Printing goes through the Windows print API. |
 | VAT | **Not registered today**, so no VAT on receipts. Built in but switched off. |
 | If MyGo is abandoned | Rewrite the POS in **Qt/C++** against the same server API. No local Go layer. |
@@ -166,6 +167,55 @@ manager-only Settings screen with an on-screen keyboard.
 - Run in the shop alongside the current way of working.
 
 ### Phase 2: Server, sync and admin (about 2–3 weeks)
+**Status (2026-11-16):** sync is done: the Postgres schema and migrations,
+`setup`, admin sign-in, menu management, till staff managed in the admin,
+pairing tills, menu and staff down, and sales, voids, refunds, days and PIN
+changes up. Reports in the admin are next, then Phase 3. See
+[docs/phase2.md](docs/phase2.md).
+
+Choices made while building it:
+- The OpenAPI spec is **3.0.3**, not 3.1: the Go generator (`oapi-codegen`)
+  supports 3.0. It generates the types and the handler interface;
+  `openapi-typescript` generates the admin's types.
+- Queries are written by hand with **pgx** instead of `sqlc`: there are few of
+  them, and it avoids one more code generator.
+- The menu is **versioned**: every change takes the organization's catalog
+  version up and stamps the rows it changed, and deletions are archives, so the
+  POS can pull "what changed since version N".
+- The server image builds the admin too, so on Railway the service's root
+  directory is the repository root (`railway.toml` is there).
+- Till staff live on the server once a till is paired, and come down with the
+  menu, on the same version counter. Their PIN hashes use the till's format, so
+  starting PINs set in the admin work on the till.
+- A PIN chosen at a till goes up with the hash of the PIN it replaced, and the
+  server takes it only if that is still current: no clocks to compare, so a
+  starting PIN set in the admin meanwhile wins.
+- The till's outbox rows point at its records; events are built from them when
+  sent, and the server applies each once, by its IDs.
+- **The menu belongs to the organization**, shared by every shop, as most POS
+  systems do it (one item library, adjusted per shop).
+
+### Later: per-shop menus
+
+Not built yet, but the design leaves room for it without changing anything
+that exists:
+
+- A table `shop_item_overrides (shop_id, item_id, price_fils NULL, hidden,
+  version)`, and later the same for categories or modifiers if needed. The
+  shared menu tables stay as they are.
+- The server builds each till's changes knowing its shop
+  (`store.Changes(ctx, terminal, since)`), so it gives that till the shop's
+  price (`COALESCE(override.price_fils, items.price_fils)`) and sends an item
+  hidden in the shop as `archived`. **The till doesn't change**: it never knows
+  overrides exist.
+- An override's change takes the organization's catalog version up like any
+  menu change, and the items query also takes items whose override for the
+  till's shop changed after `since`. Tills of other shops find nothing new.
+- Sales keep the price each line was sold at, so reports stay right whatever a
+  shop charged.
+- New: the table and its migration, the query change, admin endpoints, and a
+  shop switcher on the admin's Menu page.
+
 - Go API, Postgres schema and migrations, OpenAPI spec, device pairing.
 - Outbox sync with retry; online/offline indicator on the POS.
 - Admin: login, menu and price management, order list, daily sales.

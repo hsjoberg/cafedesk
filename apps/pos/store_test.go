@@ -23,7 +23,7 @@ func openTestStore(t *testing.T, dir string) *Store {
 func TestCatalogSeedAndReload(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t, t.TempDir())
-	c, err := s.LoadCatalog(ctx)
+	c, err := s.LoadCatalog(ctx, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,10 @@ func TestCatalogSeedAndReload(t *testing.T) {
 		t.Errorf("extras %+v", g)
 	}
 	// Loading again doesn't seed twice.
-	c2, _ := s.LoadCatalog(ctx)
+	c2, _ := s.LoadCatalog(ctx, true)
+	if empty, _ := openTestStore(t, t.TempDir()).LoadCatalog(ctx, false); len(empty.Categories) != 0 {
+		t.Error("a till out of demo mode got the demo menu")
+	}
 	if len(c2.Items) != len(c.Items) {
 		t.Errorf("reloaded %d items", len(c2.Items))
 	}

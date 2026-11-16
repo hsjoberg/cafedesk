@@ -57,6 +57,16 @@ type app struct {
 	// The system's start-at-login setting, nil in tests.
 	setOpenAtLogin func(bool) error
 	openAtLogin    bool
+	// demo runs the till without an admin, on the demo menu and its own
+	// staff, for trying it out and for tests (CAFEDESK_DEMO=1). Otherwise a
+	// till is connected to an admin before its first sale.
+	demo bool
+	// Where the device token is kept; nil leaves the till unconnected.
+	secrets secretStore
+	token   string
+	synced  bool // the menu and staff have come from the admin at least once
+	sync    syncState
+	pairing *pairState
 
 	staff *Staff       // signed in; nil while locked
 	day   *BusinessDay // the open day; nil until it is started
@@ -152,7 +162,7 @@ func newApp(cfg Config, cfgDir string) *app {
 		cfg:         cfg,
 		cfgDir:      cfgDir,
 		theme:       posTheme(),
-		catalog:     demoCatalog(),
+		catalog:     &Catalog{Groups: map[string]ModifierGroup{}},
 		selected:    -1,
 		optionsLine: -1,
 		nextNumber:  1,
@@ -202,6 +212,11 @@ func (a *app) attach(win *mygo.Window) {
 			win.Update(a.autoBackup)
 		}
 	}()
+	go func() {
+		for range time.Tick(30 * time.Second) {
+			mygo.RunOnMain(a.syncNow)
+		}
+	}()
 }
 
 // load reads the menu and makes sure someone can sign in, as the app starts.
@@ -210,18 +225,38 @@ func (a *app) load() {
 		return
 	}
 	ctx := context.Background()
-	if err := a.store.EnsureStaff(ctx); err != nil {
-		a.storeErr = err
+	if a.demo {
+		if err := a.store.EnsureStaff(ctx); err != nil {
+			a.storeErr = err
+			return
+		}
+	} else if v, err := a.store.SyncVersion(ctx); err == nil {
+		a.synced = v > 0
+	}
+	c, err := a.store.LoadCatalog(ctx, a.demo)
+	if err != nil {
+		a.storeErr = fmt.Errorf("read the menu: %w", err)
 		return
 	}
-	if c, err := a.store.LoadCatalog(ctx); err != nil {
-		a.storeErr = fmt.Errorf("read the menu: %w", err)
-	} else if len(c.Categories) > 0 {
-		a.catalog = c
+	a.setCatalog(c)
+}
+
+// setCatalog puts a menu on the screen, keeping the chosen category if it
+// is still there.
+func (a *app) setCatalog(c *Catalog) {
+	a.catalog = c
+	if _, ok := c.Category(a.category); !ok {
+		a.category, a.page = "", 0
+		if len(c.Categories) > 0 {
+			a.category = c.Categories[0].ID
+		}
 	}
-	if len(a.catalog.Categories) > 0 {
-		a.category = a.catalog.Categories[0].ID
-	}
+}
+
+// needsSetup reports whether the till must be connected to an admin before
+// it can be used: it has never been, or hasn't yet fetched the menu and staff.
+func (a *app) needsSetup() bool {
+	return !a.demo && (a.token == "" || a.cfg.ShopID == "local" || !a.synced)
 }
 
 func (a *app) storeError() error {
@@ -319,7 +354,7 @@ func (a *app) lockTill() {
 	a.staff = nil
 	a.sheet = sheetNone
 	a.screen = screenOrder
-	a.approval, a.keyboard, a.pinChange, a.refund, a.voiding = nil, nil, nil, nil, nil
+	a.approval, a.keyboard, a.pinChange, a.refund, a.voiding, a.pairing = nil, nil, nil, nil, nil, nil
 	a.settings.by = nil
 }
 
@@ -368,6 +403,7 @@ func (a *app) startDay() {
 			}
 			a.day, a.dayErr, a.nextNumber = &d, "", 1
 			a.float = amountEntry{}
+			a.syncNow()
 		}
 	})
 }
@@ -499,6 +535,7 @@ func (a *app) pinChangeKey(k string) {
 			if a.staff != nil && a.staff.ID == id {
 				a.staff.MustChangePIN = false
 			}
+			a.syncNow()
 			a.settings.msg = result{text: "PIN changed for " + p.name + "."}
 		}
 	})
@@ -714,6 +751,7 @@ func (a *app) completeSale() {
 			a.lastCode = o.Code
 			a.lastChange = o.Change
 			a.printOrder(o, false)
+			a.syncNow()
 		}
 	})
 }

@@ -11,6 +11,8 @@ services:
       # builds the server and pkg modules on their own.
       GOWORK: "off"
       DATABASE_URL: postgres://cafedesk:cafedesk@postgres:5432/cafedesk?sslmode=disable
+      # Server tests make a database of their own for each test here.
+      TEST_DATABASE_URL: postgres://cafedesk:cafedesk@postgres:5432/cafedesk?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy

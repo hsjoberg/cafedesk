@@ -17,9 +17,9 @@ internet, but that's all Phase 0 needs until the shop goes live.
 1. Create a project, and add a service from this repository (push it to GitHub
    first), or deploy from your machine with the Railway CLI: `railway up` in
    `apps/server`.
-2. In the service's settings, set **Root directory** to `apps/server`. Railway
-   then builds `apps/server/Dockerfile`, as `apps/server/railway.toml` says, and
-   checks `/healthz`.
+2. Leave the service's **root directory** as the repository root. Railway then
+   builds `apps/server/Dockerfile`, as `railway.toml` says, and checks
+   `/healthz`. (See [phase2.md](phase2.md) for the database and setup.)
 3. Under **Networking**, choose **Generate domain**. You get an address like
    `https://cafedesk-server-production.up.railway.app`, with HTTPS set up by
    Railway.

@@ -22,3 +22,10 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# The admin's build, embedded into the server
+apps/server/web/dist/*
+!apps/server/web/dist/.gitkeep
+
+# The admin's dependencies
+apps/admin/node_modules/

@@ -5,10 +5,15 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 
+	"cafedesk/apps/pos/api"
+
+	"github.com/egoist/mygo/plugins/sqlite"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -163,7 +168,28 @@ func (s *Store) SetPIN(ctx context.Context, id, pin string) error {
 	} else if taken {
 		return errPINTaken
 	}
-	_, err := s.exec(ctx, "UPDATE staff SET pin_hash = ?, must_change_pin = 0 WHERE id = ?", hashPIN(pin), id)
+	rows, err := s.query(ctx, "SELECT pin_hash FROM staff WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	if len(rows.Values) == 0 {
+		return errNotFound
+	}
+	// The server takes the new PIN only if the one it replaces is still
+	// current there, so the event carries both.
+	now := time.Now()
+	ev := api.StaffPinEvent{PreviousPinHash: str(rows.Values[0][0]), PinHash: hashPIN(pin), ChangedAt: now.UTC()}
+	if uid, err := uuid.Parse(id); err == nil {
+		ev.StaffId = uid
+	}
+	payload, err := json.Marshal(ev)
+	if err != nil {
+		return err
+	}
+	_, err = s.tx(ctx, []sqlite.Statement{
+		stmt("UPDATE staff SET pin_hash = ?, must_change_pin = 0 WHERE id = ?", ev.PinHash, id),
+		stmt("INSERT INTO outbox (entity, entity_id, created_at, payload) VALUES ('staff_pin', ?, ?, ?)", id, ts(now), string(payload)),
+	})
 	return err
 }
 

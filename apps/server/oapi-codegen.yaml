@@ -1,0 +1,7 @@
+# Generates the API's Go types and handler interface from api/openapi.yaml:
+#   go generate ./...
+package: api
+output: internal/api/api.gen.go
+generate:
+  std-http-server: true
+  models: true

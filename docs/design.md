@@ -159,6 +159,71 @@ Retry button. They never block a sale.
 - Button labels say what happens: "Void T1-004", "Refund AED 2.00",
   "Close the day". None is a bare "OK" or "Confirm".
 
+## Admin (Phase 2)
+
+**Brief.** The admin is a web page for the owner or a manager, on a laptop or a
+phone. Its first job is the menu: categories, items, prices and options.
+Terminals, staff and reports come next.
+
+**Tokens.** The same palette and Readex Pro (served by the admin itself, not a
+font CDN), and the same type scale. Body text is 16. Web additions:
+
+| Name | Hex | Role |
+|---|---|---|
+| Field | `#FFFFFF` with a `#AEB7AA` hairline | Text inputs: paper, so typed text sits on what it becomes |
+| Focus | Ink, 3 px ring, 2 px out | Keyboard focus on every control |
+
+**Layout.** The menu page is the till's own menu wall, at the same proportions:
+category tabs, then tiles with their signage band, English and Arabic names,
+and price. **The tile is the preview.** Clicking one opens its editor in a tile
+panel on the right, and the tile updates as you type. The till's receipt strip
+becomes the editing panel, in the same place.
+
+```
+┌ Cafedesk  Downtown ──────────── Menu   Options ──────── Owner  Sign out ┐
+│ ■ Tea  ■ Meals  ■ Snacks  ■ Drinks   + Category                          │
+├────────────────────────────────────────────────┬────────────────────────┤
+│ ▀▀▀▀▀▀ ▀▀▀▀▀▀ ▀▀▀▀▀▀ ▀▀▀▀▀▀                     │ Edit item              │
+│ Karak  Saffron Ginger Masala                    │ Name  [Karak chai    ] │
+│ شاي كرك ...                                     │ Arabic [شاي كرك     ] │
+│ 1.00   2.00   1.50   1.50                       │ Price [1.00]           │
+│ [+ Item]                                        │ Options ☑ Sugar        │
+│                                                 │ ☐ Kitchen ticket       │
+│                                                 │ [Save item] [Delete]   │
+└─────────────────────────────────────────────────┴────────────────────────┘
+```
+
+- Under 900 px wide: tiles in two columns, tabs scroll sideways, and the editor
+  opens as a full-screen sheet.
+- Left-aligned text. Labels sit above fields, in sentence case.
+- Reordering is with "Move earlier" and "Move later" buttons, not dragging, so
+  it works with a keyboard and a thumb.
+
+**Principles.** The till's principles carry over: what the admin shows is what
+the till shows; no saffron (no money moves in the admin); chili only for
+deleting; every button says what it does ("Save item", "Delete category").
+
+**Review against defaults.** The default admin would be a left sidebar, white
+cards with shadows, a blue primary button and a data table of items. Instead:
+navigation is two words in the top bar, the ground is concrete, and the menu is
+shown as tiles, not a table. Tables come later for reports, where they belong.
+
+**Critique pass.** Screenshots at 1366, 1024 and 390 wide (a phone), taken in
+headless Edge, led to these changes: the top bar's links had kept the
+browser's blue and purple; the editor's preview tile on a phone vanished into
+the sheet's tile color, so it is paper there; and the signed-in name is hidden
+on phones to keep the top bar on one line with Sign out.
+
+### Staff, Tills and pairing
+
+- **Admin Staff and Tills** follow the Options page: a list on the left, the
+  editor on the right. A pairing code is set at 44 in a paper panel, split
+  4 and 4 to read aloud, with the minutes it has left.
+- **The till's pairing sheet** reuses the PIN pad, with eight dots.
+- **Sync on the till** is quiet when all is well: nothing shows. "Offline",
+  "Unpaired" or "Sync stopped" shows by the clock in chili only when something
+  needs a look, and the till menu and Settings give the sentence.
+
 ## Not designed yet
 
 The Checks screen of Phase 0 is a diagnostic page, styled with the same tokens
