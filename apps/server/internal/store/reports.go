@@ -27,7 +27,7 @@ const dateLayout = "2006-01-02"
 func (s *Store) SalesReport(ctx context.Context, orgID uuid.UUID, from, to time.Time, shopID *uuid.UUID) (api.SalesReport, error) {
 	rep := api.SalesReport{From: from.Format(dateLayout), To: to.Format(dateLayout),
 		Days: []api.DaySales{}, Hours: make([]api.HourSales, 24), Items: []api.ItemSales{},
-		Tills: []api.TillSales{}, Staff: []api.StaffSales{}, Closes: []api.DayClose{}}
+		Tills: []api.TillSales{}, Staff: []api.StaffSales{}, Closes: []api.DayClose{}, CashMovements: []api.CashMovement{}}
 	for h := range rep.Hours {
 		rep.Hours[h].Hour = h
 	}
@@ -182,7 +182,8 @@ func (s *Store) SalesReport(ctx context.Context, orgID uuid.UUID, from, to time.
 				COALESCE((SELECT SUM(o.total_fils) FROM orders o
 					WHERE o.business_day_id = x.id AND o.status = 'completed' AND o.payment_method = 'cash'), 0)::bigint,
 				COALESCE((SELECT SUM(r.total_fils) FROM refunds r
-					WHERE r.business_day_id = x.id AND r.method = 'cash'), 0)::bigint
+					WHERE r.business_day_id = x.id AND r.method = 'cash'), 0)::bigint,
+				COALESCE((SELECT SUM(m.amount_fils) FROM cash_movements m WHERE m.business_day_id = x.id), 0)::bigint
 			FROM business_days x JOIN terminals t ON t.id = x.terminal_id
 			WHERE x.org_id = $1 AND x.date BETWEEN $2::date AND $3::date AND ($4::uuid IS NULL OR x.shop_id = $4)
 			ORDER BY x.date DESC, length(t.code), t.code, x.opened_at DESC`, args...)
@@ -192,8 +193,9 @@ func (s *Store) SalesReport(ctx context.Context, orgID uuid.UUID, from, to time.
 		rep.Closes, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (api.DayClose, error) {
 			var c api.DayClose
 			err := r.Scan(&c.Id, &c.Date, &c.TerminalCode, &c.TerminalName, &c.OpenedAt, &c.OpenedByName,
-				&c.ClosedAt, &c.ClosedByName, &c.FloatFils, &c.CountedFils, &c.CashSalesFils, &c.CashRefundsFils)
-			c.ExpectedFils = c.FloatFils + c.CashSalesFils - c.CashRefundsFils
+				&c.ClosedAt, &c.ClosedByName, &c.FloatFils, &c.CountedFils, &c.CashSalesFils, &c.CashRefundsFils,
+				&c.CashMovementsFils)
+			c.ExpectedFils = c.FloatFils + c.CashSalesFils - c.CashRefundsFils + c.CashMovementsFils
 			if c.ClosedAt != nil && c.CountedFils != nil {
 				d := *c.CountedFils - c.ExpectedFils
 				c.DifferenceFils = &d
@@ -201,6 +203,24 @@ func (s *Store) SalesReport(ctx context.Context, orgID uuid.UUID, from, to time.
 				c.CountedFils = nil
 			}
 			return c, err
+		})
+		if err != nil {
+			return err
+		}
+
+		rows, err = tx.Query(ctx, `SELECT m.id, d.date::text, t.code, m.created_at, m.amount_fils, m.reason,
+				m.staff_name, m.approved_by_name
+			FROM cash_movements m JOIN business_days d ON d.id = m.business_day_id JOIN terminals t ON t.id = m.terminal_id
+			WHERE m.org_id = $1 AND d.date BETWEEN $2::date AND $3::date AND ($4::uuid IS NULL OR m.shop_id = $4)
+			ORDER BY m.created_at DESC`, args...)
+		if err != nil {
+			return err
+		}
+		rep.CashMovements, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (api.CashMovement, error) {
+			var m api.CashMovement
+			err := r.Scan(&m.Id, &m.Date, &m.TerminalCode, &m.CreatedAt, &m.AmountFils, &m.Reason,
+				&m.StaffName, &m.ApprovedByName)
+			return m, err
 		})
 		return err
 	})

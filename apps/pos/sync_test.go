@@ -191,7 +191,7 @@ func TestConnectAndSync(t *testing.T) {
 	}
 
 	// Ravi's own PIN went up, with the one it replaced.
-	pins := f.received(api.StaffPin)
+	pins := f.received(api.EventTypeStaffPin)
 	if len(pins) != 1 || pins[0].StaffPin.StaffId != f.ravi || pins[0].StaffPin.PreviousPinHash != f.raviHash ||
 		!checkPIN(pins[0].StaffPin.PinHash, "9090") {
 		t.Fatalf("PIN change sent: %+v", pins)
@@ -202,8 +202,8 @@ func TestConnectAndSync(t *testing.T) {
 	a.startPayment()
 	a.method = payCard
 	a.completeSale()
-	orders := f.received(api.Order)
-	if len(f.received(api.BusinessDay)) != 1 || len(orders) != 1 || orders[0].Order.Code != "T2-001" ||
+	orders := f.received(api.EventTypeOrder)
+	if len(f.received(api.EventTypeBusinessDay)) != 1 || len(orders) != 1 || orders[0].Order.Code != "T2-001" ||
 		orders[0].Order.StaffName != "Ravi" || orders[0].Order.Lines[0].Modifiers[0].Name != "Normal sugar" {
 		t.Fatalf("events %+v", f.events)
 	}
@@ -233,8 +233,8 @@ func TestOfflineThenSends(t *testing.T) {
 	}
 	a.cfg.ServerURL = f.URL // back online
 	a.syncNow()
-	if a.sync.err != "" || a.sync.pending != 0 || len(f.received(api.Order)) != 2 {
-		t.Errorf("after coming back: %+v, %d orders", a.sync, len(f.received(api.Order)))
+	if a.sync.err != "" || a.sync.pending != 0 || len(f.received(api.EventTypeOrder)) != 2 {
+		t.Errorf("after coming back: %+v, %d orders", a.sync, len(f.received(api.EventTypeOrder)))
 	}
 }
 
@@ -265,7 +265,7 @@ func TestDisconnectedTillKeepsSelling(t *testing.T) {
 func TestRejectedEventStopsTheQueue(t *testing.T) {
 	a, f, _, _ := connectedTill(t)
 	f.mu.Lock()
-	f.reject = api.Order
+	f.reject = api.EventTypeOrder
 	f.mu.Unlock()
 	for range 2 {
 		a.addItem(a.catalog.Items[0])
@@ -307,7 +307,7 @@ func TestDemoSalesSetAside(t *testing.T) {
 	a.staff = nil
 	tt := ui.NewTester(a.view, 1366, 768)
 	connect(t, a, tt)
-	if len(f.received(api.Order)) != 0 || len(f.received(api.BusinessDay)) != 0 {
+	if len(f.received(api.EventTypeOrder)) != 0 || len(f.received(api.EventTypeBusinessDay)) != 0 {
 		t.Errorf("demo sales reached the admin: %+v", f.events)
 	}
 	aside, _ := filepath.Glob(filepath.Join(a.cfgDir, "pos-demo-*.db"))

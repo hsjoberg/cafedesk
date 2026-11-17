@@ -136,12 +136,13 @@ Same tokens and principles. What each new screen does, and how:
 | Screen | Layout | Notes |
 |---|---|---|
 | **Lock** | Concrete ground. Left: shop name at 36, the day's state below it ("Day open since 07:02"). Right: a tile panel with four PIN dots and a paper numpad. | A 4-digit PIN unlocks at the fourth digit, so there is no Unlock button. A wrong PIN shakes the dots once (motion that answers an action) and clears them. |
-| **Start the day** | One centered tile panel: "Cash in the drawer", the amount at 36, a numpad, and "Start the day" in ink. | Not saffron: no sale takes place. |
+| **Start the day** | Only for a till's first day. One centered tile panel: "Cash in the drawer", the amount at 36, a numpad, and "Start the day" in ink. | Not saffron: no sale takes place. After it, days start with their first sale, so there is no screen between signing in and selling. |
 | **Till menu** | A sheet over the menu wall, opened from the cashier's name at the top right. Paper rows, each with a label and one muted line saying what it does. | Replaces the Phase 0 Checks button. |
 | **Options for a line** | A sheet over the menu wall: the item's name, then each modifier group as a row of choice buttons, with the chosen one filled with ink. Price changes show as "+1.00". "Done" in ink. | Tapping a tile adds the item with its default options at once, so a plain karak stays one tap. Options are changed from the selected receipt line. |
 | **Orders** | The order screen's two zones: a list of orders on the left, and on the right **the selected order drawn as its receipt strip**, with Reprint, Refund and Void below it. | The receipt-strip principle again: you look at the receipt you would reprint. |
 | **Refund** | A sheet over the list: each line with − and + for the quantity to refund, a reason, then "Refund AED 2.00" in saffron. | Saffron: money moves. |
-| **Day report** | Left: the report as the paper strip it prints as. Right: "Print day report", then "Close the day": count the cash on a numpad, see the difference, close in ink. | |
+| **Day report** | Left: the report as the paper strip it prints as. Right: "Cash in or out", "Print day report", then closing: an optional count on a numpad, the difference as it is typed, and the button in ink, "Close without counting" until a count is typed, then "Close the day". | The button's label says which close it is, so a close without a count is never a mistake. |
+| **Cash in or out** | A sheet over the day report: "Take out" or "Put in", the reason as buttons (Banked, Paid a supplier, Taken by the owner, Other; Change added, Other), the amount on a numpad, and "Take out AED 85.50" in ink. | Ink, not saffron: no sale takes place. Needs a manager. |
 | **Settings** | Plain panels, as on the Checks screen: shop, receipt printer, kitchen printer, staff, backups. | Text is typed on an on-screen keyboard sheet, since the POS has no keyboard. |
 | **Manager PIN** | A small centered sheet over everything: what needs approval ("Void T1-004"), PIN dots, a numpad. | Skipped when a manager is already signed in. |
 
@@ -246,8 +247,8 @@ figures. It replaces a row of stat cards, which would be the generic answer.
 │ ─┸─┸─┸─┸─┸─┸─ 7  8  9 …                     │ AED 1,234.50              │
 │ Show as a table                             │ 86 orders, 14.35 average  │
 │                                             │ ───────────────────────── │
-│ Cash counts  (each till's day: expected,    │ Sales               1,334 │
-│   counted, short or over)                   │ Refunds (2)          -100 │
+│ Cash counts  (each till's day: start,       │ Sales               1,334 │
+│   expected, counted, short or over)         │ Refunds (2)          -100 │
 │ What sold    (ranked, a thin bar per row)   │ Cash / Card               │
 │ Tills | Staff                               │ Voided, not counted (1)   │
 └─────────────────────────────────────────────┴───────────────────────────┘

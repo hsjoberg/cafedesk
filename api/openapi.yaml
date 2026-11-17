@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.12.0
+  version: 0.13.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
 
@@ -1324,7 +1324,7 @@ components:
       description: A date in the shop's own time, YYYY-MM-DD.
     SalesReport:
       type: object
-      required: [from, to, totals, days, hours, items, tills, staff, closes]
+      required: [from, to, totals, days, hours, items, tills, staff, closes, cashMovements]
       properties:
         from:
           $ref: "#/components/schemas/LocalDate"
@@ -1360,6 +1360,11 @@ components:
           description: Each till's business days, latest first, with their cash counts.
           items:
             $ref: "#/components/schemas/DayClose"
+        cashMovements:
+          type: array
+          description: Cash put into or taken out of the tills' drawers, latest first.
+          items:
+            $ref: "#/components/schemas/CashMovement"
     SalesTotals:
       type: object
       required: [orders, grossFils, cashFils, cardFils, refunds, refundsFils, refundsCashFils, voids, voidsFils, netFils,
@@ -1494,7 +1499,8 @@ components:
           format: int64
     DayClose:
       type: object
-      required: [id, date, terminalCode, terminalName, openedAt, openedByName, floatFils, cashSalesFils, cashRefundsFils, expectedFils]
+      required: [id, date, terminalCode, terminalName, openedAt, openedByName, floatFils, cashSalesFils, cashRefundsFils,
+        cashMovementsFils, expectedFils]
       properties:
         id:
           type: string
@@ -1516,26 +1522,59 @@ components:
           description: Missing while the day is open, or its close hasn't been sent yet.
         closedByName:
           type: string
+          description: Missing when the day closed by itself, at the till's end of day.
         floatFils:
           type: integer
           format: int64
+          description: What the drawer held at the start, counted or carried over from the day before.
         cashSalesFils:
           type: integer
           format: int64
         cashRefundsFils:
           type: integer
           format: int64
+        cashMovementsFils:
+          type: integer
+          format: int64
+          description: Cash put in, less cash taken out, other than by sales and refunds.
         expectedFils:
           type: integer
           format: int64
-          description: The float, plus cash sales, less cash refunds.
+          description: The float, plus cash sales, less cash refunds, plus cash put in less taken out.
         countedFils:
           type: integer
           format: int64
         differenceFils:
           type: integer
           format: int64
-          description: Counted less expected; below 0 is short.
+          description: |
+            Counted less expected; below 0 is short. As each day starts with
+            what the day before should have left, it covers every day since
+            the till's last count.
+    CashMovement:
+      type: object
+      required: [id, date, terminalCode, createdAt, amountFils, reason, staffName, approvedByName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        date:
+          $ref: "#/components/schemas/LocalDate"
+        terminalCode:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        amountFils:
+          type: integer
+          format: int64
+          description: Above 0 put in, below 0 taken out.
+        reason:
+          type: string
+        staffName:
+          type: string
+        approvedByName:
+          type: string
 
     Area:
       type: string
@@ -2220,7 +2259,7 @@ components:
           description: The till's number for the event, increasing.
         type:
           type: string
-          enum: [business_day, order, order_void, refund, staff_pin]
+          enum: [business_day, order, order_void, refund, staff_pin, cash_movement]
         businessDay:
           $ref: "#/components/schemas/BusinessDayEvent"
         order:
@@ -2231,10 +2270,18 @@ components:
           $ref: "#/components/schemas/RefundEvent"
         staffPin:
           $ref: "#/components/schemas/StaffPinEvent"
+        cashMovement:
+          $ref: "#/components/schemas/CashMovementEvent"
     BusinessDayEvent:
       type: object
       required: [id, date, openedAt, openedBy, openedByName, openingFloatFils]
-      description: A day as it stands, opened or closed.
+      description: |
+        A day as it stands, opened or closed. The opening float is what the
+        drawer held at the start: counted on a till's first day, and after
+        that carried over from the day before (its count, or what it should
+        have held if it wasn't counted). A day that closed by itself, at the
+        till's end of day, has no closedBy. A day closed without a count has
+        no countedCashFils.
       properties:
         id:
           type: string
@@ -2404,6 +2451,35 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RefundLineEvent"
+    CashMovementEvent:
+      type: object
+      required: [id, businessDayId, createdAt, staffId, staffName, approvedBy, approvedByName, amountFils, reason]
+      description: Cash put into the drawer (amountFils above 0) or taken out of it (below 0), not by a sale.
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessDayId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        staffId:
+          type: string
+          format: uuid
+        staffName:
+          type: string
+        approvedBy:
+          type: string
+          format: uuid
+        approvedByName:
+          type: string
+        amountFils:
+          type: integer
+          format: int64
+        reason:
+          type: string
     RefundLineEvent:
       type: object
       required: [orderLineId, qty, amountFils]

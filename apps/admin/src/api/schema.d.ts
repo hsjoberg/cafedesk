@@ -906,6 +906,8 @@ export interface components {
             staff: components["schemas"]["StaffSales"][];
             /** @description Each till's business days, latest first, with their cash counts. */
             closes: components["schemas"]["DayClose"][];
+            /** @description Cash put into or taken out of the tills' drawers, latest first. */
+            cashMovements: components["schemas"]["CashMovement"][];
         };
         SalesTotals: {
             /** @description Completed orders; voided ones aren't sales. */
@@ -1010,8 +1012,12 @@ export interface components {
              * @description Missing while the day is open, or its close hasn't been sent yet.
              */
             closedAt?: string;
+            /** @description Missing when the day closed by itself, at the till's end of day. */
             closedByName?: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description What the drawer held at the start, counted or carried over from the day before.
+             */
             floatFils: number;
             /** Format: int64 */
             cashSalesFils: number;
@@ -1019,16 +1025,39 @@ export interface components {
             cashRefundsFils: number;
             /**
              * Format: int64
-             * @description The float, plus cash sales, less cash refunds.
+             * @description Cash put in, less cash taken out, other than by sales and refunds.
+             */
+            cashMovementsFils: number;
+            /**
+             * Format: int64
+             * @description The float, plus cash sales, less cash refunds, plus cash put in less taken out.
              */
             expectedFils: number;
             /** Format: int64 */
             countedFils?: number;
             /**
              * Format: int64
-             * @description Counted less expected; below 0 is short.
+             * @description Counted less expected; below 0 is short. As each day starts with
+             *     what the day before should have left, it covers every day since
+             *     the till's last count.
              */
             differenceFils?: number;
+        };
+        CashMovement: {
+            /** Format: uuid */
+            id: string;
+            date: components["schemas"]["LocalDate"];
+            terminalCode: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * Format: int64
+             * @description Above 0 put in, below 0 taken out.
+             */
+            amountFils: number;
+            reason: string;
+            staffName: string;
+            approvedByName: string;
         };
         /**
          * @description Where a purchase goes: the counter (tea and drinks), the kitchen,
@@ -1476,14 +1505,22 @@ export interface components {
              */
             seq: number;
             /** @enum {string} */
-            type: "business_day" | "order" | "order_void" | "refund" | "staff_pin";
+            type: "business_day" | "order" | "order_void" | "refund" | "staff_pin" | "cash_movement";
             businessDay?: components["schemas"]["BusinessDayEvent"];
             order?: components["schemas"]["OrderEvent"];
             orderVoid?: components["schemas"]["OrderVoidEvent"];
             refund?: components["schemas"]["RefundEvent"];
             staffPin?: components["schemas"]["StaffPinEvent"];
+            cashMovement?: components["schemas"]["CashMovementEvent"];
         };
-        /** @description A day as it stands, opened or closed. */
+        /**
+         * @description A day as it stands, opened or closed. The opening float is what the
+         *     drawer held at the start: counted on a till's first day, and after
+         *     that carried over from the day before (its count, or what it should
+         *     have held if it wasn't counted). A day that closed by itself, at the
+         *     till's end of day, has no closedBy. A day closed without a count has
+         *     no countedCashFils.
+         */
         BusinessDayEvent: {
             /** Format: uuid */
             id: string;
@@ -1583,6 +1620,24 @@ export interface components {
             /** Format: int64 */
             totalFils: number;
             lines: components["schemas"]["RefundLineEvent"][];
+        };
+        /** @description Cash put into the drawer (amountFils above 0) or taken out of it (below 0), not by a sale. */
+        CashMovementEvent: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            businessDayId: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: uuid */
+            staffId: string;
+            staffName: string;
+            /** Format: uuid */
+            approvedBy: string;
+            approvedByName: string;
+            /** Format: int64 */
+            amountFils: number;
+            reason: string;
         };
         RefundLineEvent: {
             /** Format: uuid */

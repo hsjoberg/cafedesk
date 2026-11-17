@@ -120,8 +120,9 @@ commands above work, but the password prompt may not; then set
 ### A demo to show or try
 
 `demo` fills a database of its own with a made-up shop: the demo menu, three
-staff, two tills and a month of sales up to today, with cash counts (a few
-short or over), voids and refunds. It refuses a database that is set up, so
+staff, two tills and a month of sales up to today, the drawer carried over
+from day to day and counted on Sundays (a few short or over), the takings
+banked on Thursdays, voids and refunds. It refuses a database that is set up, so
 it never mixes into a real one.
 
 ```powershell
@@ -153,9 +154,12 @@ docker compose exec postgres dropdb -U cafedesk cafedesk_demo
   refunds, and voided orders, which aren't counted. Then sales by hour (one
   day) or by day (a range, with by hour one tap away), each column showing its
   amount when pointed at, and the same numbers as a table; **Cash counts**, each
-  till's day with what the drawer should have held (float, plus cash sales,
-  less cash refunds), what was counted, and how much short or over (over a
-  week, the counts that came out exact fold away); what sold; and sales by till
+  till's day with what the drawer should have held (what it started with,
+  plus cash sales, less cash refunds, plus cash put in less taken out), what
+  was counted if it was, and how much short or over; a day starts with what
+  the day before left, so a count covers every day since the last one (over
+  a week, days not counted and counts that came out exact fold away); then
+  **Cash in and out**, each with its reason and who did it; what sold; and sales by till
   and by staff.
   - Sales and refunds count on the **business day** the till had open, as on
     the till's own day report, so the two agree. Hours are the shop's clock.

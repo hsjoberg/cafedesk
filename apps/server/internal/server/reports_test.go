@@ -52,19 +52,19 @@ func TestSalesReport(t *testing.T) {
 
 	var res api.EventResult
 	till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{
-		{Seq: 1, Type: api.BusinessDay, BusinessDay: &open1},
-		{Seq: 2, Type: api.Order, Order: &o1},
-		{Seq: 3, Type: api.Order, Order: &o2},
-		{Seq: 4, Type: api.Order, Order: &o3},
-		{Seq: 5, Type: api.Refund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: o1.Id, BusinessDayId: day1,
+		{Seq: 1, Type: api.EventTypeBusinessDay, BusinessDay: &open1},
+		{Seq: 2, Type: api.EventTypeOrder, Order: &o1},
+		{Seq: 3, Type: api.EventTypeOrder, Order: &o2},
+		{Seq: 4, Type: api.EventTypeOrder, Order: &o3},
+		{Seq: 5, Type: api.EventTypeRefund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: o1.Id, BusinessDayId: day1,
 			CreatedAt: at("2026-11-14", 9, 0), StaffId: manager.Id, StaffName: "Ravi", ApprovedBy: manager.Id,
 			ApprovedByName: "Ravi", Reason: "Wrong item", Method: api.Cash, TotalFils: 100,
 			Lines: []api.RefundLineEvent{{OrderLineId: o1.Lines[1].Id, Qty: 1, AmountFils: 100}}}},
-		{Seq: 6, Type: api.BusinessDay, BusinessDay: &closed1},
-		{Seq: 7, Type: api.BusinessDay, BusinessDay: &open2},
-		{Seq: 8, Type: api.Order, Order: &o4},
-		{Seq: 9, Type: api.Order, Order: &voided},
-		{Seq: 10, Type: api.OrderVoid, OrderVoid: &api.OrderVoidEvent{OrderId: voided.Id, VoidedAt: at("2026-11-15", 9, 5),
+		{Seq: 6, Type: api.EventTypeBusinessDay, BusinessDay: &closed1},
+		{Seq: 7, Type: api.EventTypeBusinessDay, BusinessDay: &open2},
+		{Seq: 8, Type: api.EventTypeOrder, Order: &o4},
+		{Seq: 9, Type: api.EventTypeOrder, Order: &voided},
+		{Seq: 10, Type: api.EventTypeOrderVoid, OrderVoid: &api.OrderVoidEvent{OrderId: voided.Id, VoidedAt: at("2026-11-15", 9, 5),
 			VoidedBy: manager.Id, VoidedByName: "Ravi", Reason: "Test"}},
 	}}, &res, bearer(token)...)
 	if len(res.Accepted) != 10 {
@@ -216,9 +216,9 @@ func TestProfit(t *testing.T) {
 			t.Fatalf("event %d: %+v", seq, res)
 		}
 	}
-	send(1, api.Event{Type: api.BusinessDay, BusinessDay: &api.BusinessDayEvent{Id: day, Date: date,
+	send(1, api.Event{Type: api.EventTypeBusinessDay, BusinessDay: &api.BusinessDayEvent{Id: day, Date: date,
 		OpenedAt: now.Add(-3 * time.Hour), OpenedBy: manager.Id, OpenedByName: "Ravi", OpeningFloatFils: 0}})
-	send(2, api.Event{Type: api.Order, Order: &early})
+	send(2, api.Event{Type: api.EventTypeOrder, Order: &early})
 
 	// Its first cost reaches back; a change, later, doesn't.
 	if code := saveKarak(ptr(int64(40))); code != 200 {
@@ -230,8 +230,8 @@ func TestProfit(t *testing.T) {
 	}
 	time.Sleep(20 * time.Millisecond)
 	late := order(2, time.Now().UTC(), line(karak.Id.String(), 1, 100))
-	send(3, api.Event{Type: api.Order, Order: &late})
-	send(4, api.Event{Type: api.Refund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: early.Id, BusinessDayId: day,
+	send(3, api.Event{Type: api.EventTypeOrder, Order: &late})
+	send(4, api.Event{Type: api.EventTypeRefund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: early.Id, BusinessDayId: day,
 		CreatedAt: now, StaffId: manager.Id, StaffName: "Ravi", ApprovedBy: manager.Id, ApprovedByName: "Ravi",
 		Reason: "Spilt", Method: api.Cash, TotalFils: 150,
 		Lines: []api.RefundLineEvent{{OrderLineId: early.Lines[0].Id, Qty: 1, AmountFils: 150}}}})
@@ -269,7 +269,7 @@ func TestProfit(t *testing.T) {
 		t.Errorf("a cleared cost: %d", *cat.Items[0].CostFils)
 	}
 	cleared := order(3, time.Now().UTC(), line(karak.Id.String(), 1, 100))
-	send(5, api.Event{Type: api.Order, Order: &cleared})
+	send(5, api.Event{Type: api.EventTypeOrder, Order: &cleared})
 	c.do("GET", "/v1/admin/reports/sales?from="+date+"&to="+date, nil, &rep)
 	if rep.Totals.CostFils != 180 || rep.Totals.UncostedFils != 200 {
 		t.Errorf("after clearing: %+v", rep.Totals)
@@ -279,5 +279,64 @@ func TestProfit(t *testing.T) {
 	till.do("GET", "/v1/terminal/changes?since=0", nil, &ch, bearer(token)...)
 	if b, _ := json.Marshal(ch); strings.Contains(string(b), "cost") {
 		t.Error("costs reach the tills")
+	}
+}
+
+// TestCashCarriedOver: a day that closed by itself, without a count, and
+// cash taken out of its drawer, as a till sends them.
+func TestCashCarriedOver(t *testing.T) {
+	c, _, _ := newServer(t)
+	_, token, manager, _ := tillSetup(t, c)
+	till := newClient(t, c.ts)
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	date := now.Format("2006-01-02")
+	day := uuid.New()
+	send := func(seq int64, ev api.Event) {
+		var res api.EventResult
+		ev.Seq = seq
+		till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{ev}}, &res, bearer(token)...)
+		if len(res.Accepted) != 1 {
+			t.Fatalf("event %d: %+v", seq, res)
+		}
+	}
+	open := api.BusinessDayEvent{Id: day, Date: date, OpenedAt: now.Add(-3 * time.Hour), OpenedBy: manager.Id,
+		OpenedByName: "Ravi", OpeningFloatFils: 30000}
+	send(1, api.Event{Type: api.EventTypeBusinessDay, BusinessDay: &open})
+	sale := api.OrderEvent{Id: uuid.New(), BusinessDayId: day, Number: 1, Code: "T1-001", CreatedAt: now.Add(-2 * time.Hour),
+		StaffId: manager.Id, StaffName: "Ravi", TotalFils: 1500, PaymentMethod: api.Cash, TenderedFils: 1500,
+		Lines: []api.OrderLineEvent{{Id: uuid.New(), ItemId: "karak", Name: "Karak chai", Qty: 15, UnitPriceFils: 100,
+			LineTotalFils: 1500, Modifiers: []api.OrderLineModifierEvent{}}}}
+	send(2, api.Event{Type: api.EventTypeOrder, Order: &sale})
+	out := api.CashMovementEvent{Id: uuid.New(), BusinessDayId: day, CreatedAt: now.Add(-time.Hour), StaffId: manager.Id,
+		StaffName: "Ravi", ApprovedBy: manager.Id, ApprovedByName: "Ravi", AmountFils: -20000, Reason: "Banked"}
+	send(3, api.Event{Type: api.EventTypeCashMovement, CashMovement: &out})
+	send(4, api.Event{Type: api.EventTypeCashMovement, CashMovement: &out}) // sent again: taken once
+	closed := open
+	closed.ClosedAt = &now // by itself: no closedBy, and no count
+	send(5, api.Event{Type: api.EventTypeBusinessDay, BusinessDay: &closed})
+
+	var rep api.SalesReport
+	c.do("GET", "/v1/admin/reports/sales?from="+date+"&to="+date, nil, &rep)
+	if len(rep.Closes) != 1 {
+		t.Fatalf("closes %+v", rep.Closes)
+	}
+	cl := rep.Closes[0]
+	if cl.CashMovementsFils != -20000 || cl.ExpectedFils != 30000+1500-20000 || cl.ClosedAt == nil ||
+		cl.ClosedByName != nil || cl.CountedFils != nil || cl.DifferenceFils != nil {
+		t.Errorf("close %+v", cl)
+	}
+	if len(rep.CashMovements) != 1 || rep.CashMovements[0].AmountFils != -20000 || rep.CashMovements[0].Reason != "Banked" ||
+		rep.CashMovements[0].TerminalCode != "T1" {
+		t.Errorf("cash movements %+v", rep.CashMovements)
+	}
+
+	// A movement needs an amount, and a day the till sent.
+	var res api.EventResult
+	zero := out
+	zero.Id, zero.AmountFils = uuid.New(), 0
+	till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{
+		{Seq: 6, Type: api.EventTypeCashMovement, CashMovement: &zero}}}, &res, bearer(token)...)
+	if res.Rejected == nil || res.Rejected.Seq != 6 {
+		t.Errorf("a movement of nothing: %+v", res)
 	}
 }

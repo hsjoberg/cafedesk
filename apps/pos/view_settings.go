@@ -19,12 +19,12 @@ func (a *app) settingsView(c *ui.Context) {
 		columns := [][]func(*ui.Context){
 			{a.syncPanel, a.shopPanel, a.staffPanel},
 			{a.receiptPrinterPanel, a.backupPanel},
-			{a.kitchenPanel, a.screenPanel},
+			{a.kitchenPanel, a.dayEndPanel, a.screenPanel},
 		}
 		if w, _ := c.Size(); w < 1200 {
 			columns = [][]func(*ui.Context){
 				{a.syncPanel, a.shopPanel, a.kitchenPanel, a.staffPanel},
-				{a.receiptPrinterPanel, a.backupPanel, a.screenPanel},
+				{a.receiptPrinterPanel, a.backupPanel, a.dayEndPanel, a.screenPanel},
 			}
 		}
 		touchScroll(c, "settings", &a.settingsDrag, func() {
@@ -328,6 +328,32 @@ func (a *app) backupPanel(c *ui.Context) {
 			}
 		})
 		resultText(c, a.settings.backup)
+	})
+}
+
+// dayEndTimes are the choices for when a day closes by itself.
+var dayEndTimes = []string{"02:00", "03:00", "04:00", "05:00", "06:00", dayEndsOff}
+
+// dayEndPanel chooses when a day still open closes by itself.
+func (a *app) dayEndPanel(c *ui.Context) {
+	panel(c, "End of the day", "A day still open closes by itself at this time, without a count, and the till locks. "+
+		"Choose a time after the shop closes and before it opens. The next sale starts the next day.", func() {
+		ui.Grid(c).Columns(3).Gap(8).Children(func() {
+			for _, t := range dayEndTimes {
+				label := t
+				if t == dayEndsOff {
+					label = "Never"
+				}
+				kind := btnOption
+				if a.cfg.dayEnds() == t {
+					kind = btnInk
+				}
+				if button(c, "day-ends-"+t, label, kind, false).PaddingX(8).Clicked() {
+					a.cfg.DayEnds = t
+					a.saveConfig()
+				}
+			}
+		})
 	})
 }
 

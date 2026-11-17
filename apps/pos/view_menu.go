@@ -15,6 +15,8 @@ func (a *app) tillMenu(c *ui.Context) {
 			if a.day != nil {
 				ui.Text(c, fmt.Sprintf("Day started %s by %s", a.day.OpenedAt.Format("15:04"), a.day.OpenedBy)).
 					FontSize(fsMeta).TextColor(colInkMuted)
+			} else {
+				ui.Text(c, "No day open. The next sale starts one.").FontSize(fsMeta).TextColor(colInkMuted)
 			}
 		})
 		if msg, bad := a.syncSummary(); msg != "" {
@@ -28,7 +30,7 @@ func (a *app) tillMenu(c *ui.Context) {
 			if optionRow(c, "menu-orders", "Orders", "Reprint, refund or void an order.").Clicked() {
 				a.openOrders()
 			}
-			if optionRow(c, "menu-day", "Day report", "Sales so far, and closing the day.").Clicked() {
+			if optionRow(c, "menu-day", "Day report", "Sales so far, cash in or out, and closing the day.").Clicked() {
 				a.openDayReport()
 			}
 			if optionRow(c, "menu-settings", "Settings", "Printers, staff and backups. Managers only.").Clicked() {

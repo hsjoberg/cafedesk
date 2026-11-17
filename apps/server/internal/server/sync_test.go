@@ -155,7 +155,7 @@ func TestEvents(t *testing.T) {
 	// An order before its day is turned away, and nothing after it is taken.
 	var res api.EventResult
 	till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{
-		{Seq: 1, Type: api.Order, Order: &order},
+		{Seq: 1, Type: api.EventTypeOrder, Order: &order},
 	}}, &res, bearer(token)...)
 	if len(res.Accepted) != 0 || res.Rejected == nil || res.Rejected.Seq != 1 {
 		t.Fatalf("an order before its day: %+v", res)
@@ -171,12 +171,12 @@ func TestEvents(t *testing.T) {
 	}
 	newPIN := auth.HashPIN("9090")
 	batch := api.EventBatch{Events: []api.Event{
-		{Seq: 1, Type: api.BusinessDay, BusinessDay: &dayEvent},
-		{Seq: 2, Type: api.Order, Order: &order},
-		{Seq: 3, Type: api.Refund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: order.Id, BusinessDayId: day, CreatedAt: now,
+		{Seq: 1, Type: api.EventTypeBusinessDay, BusinessDay: &dayEvent},
+		{Seq: 2, Type: api.EventTypeOrder, Order: &order},
+		{Seq: 3, Type: api.EventTypeRefund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: order.Id, BusinessDayId: day, CreatedAt: now,
 			StaffId: manager.Id, StaffName: "Ravi", ApprovedBy: manager.Id, ApprovedByName: "Ravi", Reason: "Other",
 			Method: api.Cash, TotalFils: 100, Lines: []api.RefundLineEvent{{OrderLineId: order.Lines[0].Id, Qty: 1, AmountFils: 100}}}},
-		{Seq: 4, Type: api.StaffPin, StaffPin: &api.StaffPinEvent{StaffId: manager.Id, PreviousPinHash: startingHash, PinHash: newPIN, ChangedAt: now}},
+		{Seq: 4, Type: api.EventTypeStaffPin, StaffPin: &api.StaffPinEvent{StaffId: manager.Id, PreviousPinHash: startingHash, PinHash: newPIN, ChangedAt: now}},
 	}}
 	for round := 0; round < 2; round++ { // sending again changes nothing
 		res = api.EventResult{}
@@ -187,9 +187,9 @@ func TestEvents(t *testing.T) {
 	closed := dayEvent
 	closed.ClosedAt, closed.ClosedBy, closed.ClosedByName, closed.CountedCashFils = ptr(now.Add(time.Hour)), &manager.Id, ptr("Ravi"), ptr(int64(10100))
 	till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{
-		{Seq: 5, Type: api.OrderVoid, OrderVoid: &api.OrderVoidEvent{OrderId: order.Id, VoidedAt: now, VoidedBy: manager.Id,
+		{Seq: 5, Type: api.EventTypeOrderVoid, OrderVoid: &api.OrderVoidEvent{OrderId: order.Id, VoidedAt: now, VoidedBy: manager.Id,
 			VoidedByName: "Ravi", Reason: "Test order"}},
-		{Seq: 6, Type: api.BusinessDay, BusinessDay: &closed},
+		{Seq: 6, Type: api.EventTypeBusinessDay, BusinessDay: &closed},
 	}}, &res, bearer(token)...)
 	if len(res.Accepted) != 2 {
 		t.Fatalf("void and close: %+v", res)
@@ -226,7 +226,7 @@ func TestEvents(t *testing.T) {
 		t.Fatalf("a new starting PIN: %d %+v", code, e)
 	}
 	till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{
-		{Seq: 7, Type: api.StaffPin, StaffPin: &api.StaffPinEvent{StaffId: manager.Id, PreviousPinHash: newPIN, PinHash: auth.HashPIN("1111"), ChangedAt: now}},
+		{Seq: 7, Type: api.EventTypeStaffPin, StaffPin: &api.StaffPinEvent{StaffId: manager.Id, PreviousPinHash: newPIN, PinHash: auth.HashPIN("1111"), ChangedAt: now}},
 	}}, &res, bearer(token)...)
 	till.do("GET", "/v1/terminal/changes?since=0", nil, &ch, bearer(token)...)
 	for _, st := range ch.Staff {

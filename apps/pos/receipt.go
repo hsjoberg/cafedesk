@@ -259,9 +259,12 @@ func reportDoc(r DayReport, cfg Config) PrintDoc {
 	b.blank()
 	b.line(PrintLine{Text: title, Bold: true, Center: true})
 	b.pair("Opened", r.Day.OpenedAt.Format("02 Jan 15:04")+" "+r.Day.OpenedBy, false)
-	if !r.Day.Open() {
+	switch {
+	case r.Day.Auto():
+		b.pair("Closed by itself", r.Day.ClosedAt.Format("02 Jan 15:04"), false)
+	case !r.Day.Open():
 		b.pair("Closed", r.Day.ClosedAt.Format("02 Jan 15:04")+" "+r.Day.ClosedBy, false)
-	} else {
+	default:
 		b.pair("Printed", r.GeneratedAt.Format("02 Jan 15:04"), false)
 	}
 	b.rule()
@@ -272,11 +275,17 @@ func reportDoc(r DayReport, cfg Config) PrintDoc {
 	b.pair("Net sales", r.Net().AED(), true)
 	b.pair(fmt.Sprintf("Voided, %d orders", r.VoidCount), r.VoidTotal.String(), false)
 	b.rule()
-	b.pair("Opening float", r.Day.OpeningFloat.String(), false)
+	b.pair("At the start", r.Day.OpeningFloat.String(), false)
 	b.pair("Cash sales", r.Cash.String(), false)
 	b.pair("Cash refunds", minus(r.RefundCash), false)
+	for _, m := range r.Movements {
+		b.pair(movementLabel(m), signed(m.Amount), false)
+	}
 	b.pair("Expected in drawer", r.ExpectedCash().String(), true)
-	if !r.Day.Open() {
+	if !r.Day.Open() && !r.Day.Counted {
+		b.pair("Counted", "not counted", false)
+	}
+	if !r.Day.Open() && r.Day.Counted {
 		b.pair("Counted", r.Day.CountedCash.String(), false)
 		diff := r.Difference()
 		label := "Difference"

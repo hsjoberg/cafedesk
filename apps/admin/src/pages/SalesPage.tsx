@@ -1,6 +1,6 @@
 import { A, useSearchParams } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js";
-import { api, call, type DayClose, type SalesReport, type Terminal } from "../api/client";
+import { api, call, type CashMovement, type DayClose, type SalesReport, type Terminal } from "../api/client";
 import { ColumnChart, type Column } from "../components/ColumnChart";
 import { OverdueInvoices } from "../components/Overdue";
 import { daysBetween, isDate, longDate, presets, rangeLabel, shortDate, todayIn } from "../dates";
@@ -116,15 +116,17 @@ export function SalesPage() {
   };
   const topItem = () => Math.max(...(report()?.items ?? []).map((i) => i.grossFils), 1);
   const shortCount = () => (report()?.closes ?? []).filter((c) => (c.differenceFils ?? 0) < 0).length;
-  // Over a week or more, the counts that came out exact fold away: the
-  // owner looks for the ones that didn't.
+  // Over a week or more, the days that weren't counted fold away, and so
+  // do the counts that came out exact: the owner looks for the ones that
+  // didn't. A day still open stays.
   const [allCloses, setAllCloses] = createSignal(false);
-  const needsLook = (c: DayClose) => c.differenceFils !== 0;
+  const needsLook = (c: DayClose) => !c.closedAt || (c.differenceFils !== undefined && c.differenceFils !== 0);
   const closes = () => {
     const list = report()?.closes ?? [];
     return allCloses() || list.length <= 6 ? list : list.filter(needsLook);
   };
-  const exactHidden = () => (report()?.closes ?? []).length - closes().length;
+  const hidden = () => (report()?.closes ?? []).length - closes().length;
+  const anyMoved = () => closes().some((c) => c.cashMovementsFils !== 0);
 
   return (
     <div class="workspace sales">
@@ -235,10 +237,14 @@ export function SalesPage() {
                   </Show>
                 </div>
                 <p class="meta">
-                  What each till's drawer should hold at closing: its float, plus cash sales, less cash refunds.
+                  What each till's drawer should hold at closing: what it started with, plus cash sales, less cash
+                  refunds. A day starts with what the day before left, so a count covers every day since the last one.
                 </p>
                 <Show when={r().closes.length} fallback={<p class="empty">No till opened a day on these dates.</p>}>
-                  <Show when={closes().length} fallback={<p class="empty">Every count came out exact.</p>}>
+                  <Show
+                    when={closes().length}
+                    fallback={<p class="empty">Every count came out exact, and no day is open.</p>}
+                  >
                     <div class="table-wrap">
                       <table class="table">
                         <thead>
@@ -246,23 +252,28 @@ export function SalesPage() {
                             <th scope="col">Day</th>
                             <th scope="col">Till</th>
                             <th scope="col">Open</th>
-                            <th scope="col" class="n">Float</th>
+                            <th scope="col" class="n">Start</th>
+                            <Show when={anyMoved()}>
+                              <th scope="col" class="n">In or out</th>
+                            </Show>
                             <th scope="col" class="n">Expected</th>
                             <th scope="col" class="n">Counted</th>
                             <th scope="col" class="n">Difference</th>
                           </tr>
                         </thead>
                         <tbody>
-                          <For each={closes()}>{(c) => <CloseRow close={c} />}</For>
+                          <For each={closes()}>{(c) => <CloseRow close={c} moved={anyMoved()} />}</For>
                         </tbody>
                       </table>
                     </div>
                   </Show>
-                  <Show when={exactHidden() > 0 || allCloses()}>
+                  <Show when={hidden() > 0 || allCloses()}>
                     <div class="row">
                       <Show when={!allCloses()}>
                         <span class="meta">
-                          {exactHidden() === 1 ? "1 more count came out exact." : `${exactHidden()} more counts came out exact.`}
+                          {hidden() === 1
+                            ? "1 more day, not counted or exact."
+                            : `${hidden()} more days, not counted or exact.`}
                         </span>
                       </Show>
                       <button type="button" class="btn btn-plain btn-small" onClick={() => setAllCloses(!allCloses())}>
@@ -270,6 +281,25 @@ export function SalesPage() {
                       </button>
                     </div>
                   </Show>
+                </Show>
+                <Show when={r().cashMovements.length}>
+                  <h3 class="subhead">Cash in and out</h3>
+                  <div class="table-wrap">
+                    <table class="table">
+                      <thead>
+                        <tr>
+                          <th scope="col">When</th>
+                          <th scope="col">Till</th>
+                          <th scope="col">Why</th>
+                          <th scope="col">Who</th>
+                          <th scope="col" class="n">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <For each={r().cashMovements}>{(m) => <MovementRow movement={m} />}</For>
+                      </tbody>
+                    </table>
+                  </div>
                 </Show>
               </section>
 
@@ -488,16 +518,26 @@ export function SalesPage() {
   );
 }
 
-/** "Ravi, 06:10 to 23:40", naming whoever closed when someone else did. */
+/**
+ * "Ravi, 06:10 to 23:40", naming whoever closed when someone else did, or
+ * that the day closed by itself.
+ */
 function shift(c: DayClose): string {
   const opened = time(c.openedAt);
   if (!c.closedAt) return `${c.openedByName}, open since ${opened}`;
   const closed = time(c.closedAt);
-  if (!c.closedByName || c.closedByName === c.openedByName) return `${c.openedByName}, ${opened} to ${closed}`;
+  if (!c.closedByName) return `${c.openedByName} ${opened}, closed by itself ${closed}`;
+  if (c.closedByName === c.openedByName) return `${c.openedByName}, ${opened} to ${closed}`;
   return `${c.openedByName} ${opened}, ${c.closedByName} ${closed}`;
 }
 
-function CloseRow(props: { close: DayClose }) {
+/** An amount with its sign: "+50.00", "−500.00". */
+function signed(fils: number): string {
+  if (fils === 0) return formatAmount(0);
+  return (fils > 0 ? "+" : "\u2212") + formatAmount(Math.abs(fils));
+}
+
+function CloseRow(props: { close: DayClose; moved: boolean }) {
   const c = () => props.close;
   const diff = () => c().differenceFils;
   return (
@@ -506,10 +546,16 @@ function CloseRow(props: { close: DayClose }) {
       <td>{c().terminalCode}</td>
       <td class="who">{shift(c())}</td>
       <td class="n">{formatAmount(c().floatFils)}</td>
+      <Show when={props.moved}>
+        <td class="n">{c().cashMovementsFils !== 0 ? signed(c().cashMovementsFils) : ""}</td>
+      </Show>
       <td class="n">{formatAmount(c().expectedFils)}</td>
       <td class="n">{c().countedFils !== undefined ? formatAmount(c().countedFils!) : ""}</td>
       <td class="n">
-        <Show when={diff() !== undefined} fallback={<span class="muted">Not counted yet</span>}>
+        <Show
+          when={diff() !== undefined}
+          fallback={<span class="muted">{c().closedAt ? "Not counted" : "Open"}</span>}
+        >
           <Show when={diff() !== 0} fallback={<span class="muted">Exact</span>}>
             <span classList={{ short: diff()! < 0 }}>
               {formatAmount(Math.abs(diff()!))} {diff()! < 0 ? "short" : "over"}
@@ -517,6 +563,21 @@ function CloseRow(props: { close: DayClose }) {
           </Show>
         </Show>
       </td>
+    </tr>
+  );
+}
+
+function MovementRow(props: { movement: CashMovement }) {
+  const m = () => props.movement;
+  return (
+    <tr>
+      <th scope="row">{when(m().createdAt)}</th>
+      <td>{m().terminalCode}</td>
+      <td>{m().amountFils < 0 ? `Taken out: ${m().reason}` : `Put in: ${m().reason}`}</td>
+      <td class="who">
+        {m().staffName === m().approvedByName ? m().staffName : `${m().staffName}, approved by ${m().approvedByName}`}
+      </td>
+      <td class="n">{signed(m().amountFils)}</td>
     </tr>
   );
 }

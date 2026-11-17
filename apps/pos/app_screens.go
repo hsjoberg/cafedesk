@@ -118,7 +118,7 @@ func (a *app) refundStep(lineID string, delta int) {
 
 func (a *app) confirmRefund() {
 	r, o := a.refund, a.order
-	if r == nil || o == nil || a.day == nil || a.staff == nil || r.saving {
+	if r == nil || o == nil || a.firstDay || a.staff == nil || r.saving {
 		return
 	}
 	if r.reason == "" {
@@ -131,17 +131,24 @@ func (a *app) confirmRefund() {
 		return
 	}
 	a.withManager(fmt.Sprintf("Refund %s on %s", total.AED(), o.Code), func(mgr Staff) {
-		store, cfg, day, staff, order := a.store, a.cfg, a.day.ID, *a.staff, *o
+		store, cfg, staff, order := a.store, a.cfg, *a.staff, *o
 		qty, reason := r.qty, r.reason
 		r.saving = true
 		a.async(func() func() {
-			ref, err := store.SaveRefund(context.Background(), cfg, order, day, qty, reason, staff, mgr, time.Now())
+			ctx, now := context.Background(), time.Now()
+			// A refund belongs to the open day; with none, it starts one.
+			day, _, err := store.EnsureDay(ctx, cfg, staff, now)
+			var ref Refund
+			if err == nil {
+				ref, err = store.SaveRefund(ctx, cfg, order, day.ID, qty, reason, staff, mgr, now)
+			}
 			return func() {
 				r.saving = false
 				if err != nil {
 					r.err = "Not refunded: " + err.Error()
 					return
 				}
+				a.day = &day
 				a.refund = nil
 				doc := refundDoc(order, ref, a.cfg)
 				doc.Kick = ref.Method == payCash && a.cfg.OpenDrawer
@@ -205,6 +212,7 @@ func (a *app) openDayReport() {
 
 func (a *app) loadReport() {
 	if a.day == nil || a.store == nil {
+		a.report = nil
 		return
 	}
 	store, id := a.store, a.day.ID
@@ -226,32 +234,100 @@ func (a *app) printReport() {
 	}
 }
 
+// closeDay closes the open day, with the cash counted in the drawer if
+// one was entered: the count is optional, and covers every day since the
+// last one.
 func (a *app) closeDay() {
 	if a.day == nil || a.store == nil {
 		return
 	}
-	if a.counted.text == "" {
-		a.dayErr = "Count the cash in the drawer first."
-		return
-	}
 	a.withManager("Close the day", func(mgr Staff) {
-		store, id, counted := a.store, a.day.ID, a.counted.value()
+		store, id := a.store, a.day.ID
+		var counted *money.Fils
+		if a.counted.text != "" {
+			c := a.counted.value()
+			counted = &c
+		}
 		a.async(func() func() {
-			r, err := store.CloseDay(context.Background(), id, mgr, counted, time.Now())
+			r, err := store.CloseDay(context.Background(), id, &mgr, counted, time.Now())
 			return func() {
 				if err != nil {
 					a.dayErr = "The day isn't closed: " + err.Error()
 					return
 				}
 				a.enqueuePrint(roleReceipt, "Day closed", reportDoc(r, a.cfg), nil)
-				a.backupNow()
-				a.syncNow()
-				a.day, a.report = nil, nil
-				a.counted = amountEntry{}
-				a.screen = screenOrder
-				a.lastCode, a.lastOrder = "", nil
+				a.dayClosed(r)
 			}
 		})
+	})
+}
+
+// Cash in or out.
+
+// cashMoveState is cash being put into the drawer or taken out of it.
+type cashMoveState struct {
+	out      bool // taking cash out
+	amount   amountEntry
+	reason   string
+	err      string
+	saving   bool
+	approver Staff
+}
+
+// Reasons for cash in or out, as the buttons offer them.
+var (
+	cashOutReasons = []string{"Banked", "Paid a supplier", "Taken by the owner", "Other"}
+	cashInReasons  = []string{"Change added", "Other"}
+)
+
+// openCashMove starts putting cash in or taking it out, with a manager's
+// approval.
+func (a *app) openCashMove() {
+	if a.firstDay || a.staff == nil {
+		return
+	}
+	a.withManager("Cash in or out", func(mgr Staff) {
+		a.cashMove = &cashMoveState{out: true, approver: mgr}
+	})
+}
+
+// saveCashMove records it in the open day, starting one if none is open.
+func (a *app) saveCashMove() {
+	m := a.cashMove
+	if m == nil || m.saving || a.staff == nil || a.store == nil {
+		return
+	}
+	amount := m.amount.value()
+	switch {
+	case amount <= 0:
+		m.err = "Enter the amount."
+		return
+	case m.reason == "":
+		m.err = "Choose a reason."
+		return
+	}
+	if m.out {
+		amount = -amount
+	}
+	store, cfg, by, approver, reason := a.store, a.cfg, *a.staff, m.approver, m.reason
+	m.saving, m.err = true, ""
+	a.async(func() func() {
+		ctx, now := context.Background(), time.Now()
+		day, _, err := store.EnsureDay(ctx, cfg, by, now)
+		if err == nil {
+			_, err = store.AddCashMovement(ctx, cfg, day.ID, by, approver, amount, reason, now)
+		}
+		return func() {
+			m.saving = false
+			if err != nil {
+				m.err = "Not saved: " + err.Error()
+				return
+			}
+			a.cashMove = nil
+			a.day = &day
+			a.loadReport()
+			a.syncNow()
+		}
 	})
 }
 

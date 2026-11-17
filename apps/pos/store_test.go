@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"cafedesk/pkg/money"
+
 	"github.com/egoist/mygo/plugins/sqlite"
 )
 
@@ -148,7 +150,8 @@ func TestDaysAndOrders(t *testing.T) {
 		t.Fatalf("order %+v, %v", got, err)
 	}
 
-	closed, err := s.CloseDay(ctx, day.ID, mgr, 5100, now.Add(time.Hour))
+	counted := money.Fils(5100)
+	closed, err := s.CloseDay(ctx, day.ID, &mgr, &counted, now.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}

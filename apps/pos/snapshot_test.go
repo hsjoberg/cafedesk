@@ -105,6 +105,20 @@ func TestSnapshots(t *testing.T) {
 		a.openDayReport()
 		a.counted.text = "160"
 		save(tt, "13-day")
+		a.counted.text = ""
+		a.store.AddCashMovement(ctx, a.cfg, a.day.ID, *a.staff, *a.staff, -5000, "Banked", time.Now())
+		a.loadReport()
+		save(tt, "13b-day-uncounted")
+		a.cashMove = &cashMoveState{out: true, approver: *a.staff, reason: "Paid a supplier"}
+		a.cashMove.amount.text = "85.5"
+		save(tt, "13c-cash-out")
+		a.cashMove = nil
+		r, _ := a.store.CloseDay(ctx, a.day.ID, nil, nil, time.Now())
+		a.dayClosed(r)
+		a.openDayReport()
+		save(tt, "13d-no-day")
+		a.screen = screenOrder
+		save(tt, "13e-order-no-day")
 
 		a.openSettings()
 		a.store.AddStaff(ctx, "Ravi", roleCashier, "4321")

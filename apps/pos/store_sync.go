@@ -118,19 +118,22 @@ func (s *Store) PendingEvents(ctx context.Context, limit int) ([]api.Event, erro
 		id, payload := str(r[2]), str(r[3])
 		switch str(r[1]) {
 		case "business_day":
-			ev.Type = api.BusinessDay
+			ev.Type = api.EventTypeBusinessDay
 			ev.BusinessDay, err = s.dayEvent(ctx, id)
 		case "order":
-			ev.Type = api.Order
+			ev.Type = api.EventTypeOrder
 			ev.Order, err = s.orderEvent(ctx, id)
 		case "order_void":
-			ev.Type = api.OrderVoid
+			ev.Type = api.EventTypeOrderVoid
 			ev.OrderVoid, err = s.voidEvent(ctx, id)
 		case "refund":
-			ev.Type = api.Refund
+			ev.Type = api.EventTypeRefund
 			ev.Refund, err = s.refundEvent(ctx, id)
+		case "cash_movement":
+			ev.Type = api.EventTypeCashMovement
+			ev.CashMovement, err = s.cashMovementEvent(ctx, id)
 		case "staff_pin":
-			ev.Type = api.StaffPin
+			ev.Type = api.EventTypeStaffPin
 			ev.StaffPin = &api.StaffPinEvent{}
 			err = json.Unmarshal([]byte(payload), ev.StaffPin)
 		default:
@@ -180,8 +183,16 @@ func (s *Store) dayEvent(ctx context.Context, id string) (*api.BusinessDayEvent,
 	d := &api.BusinessDayEvent{Id: uid(r[0]), Date: str(r[1]), OpenedAt: parseTS(r[2]).UTC(), OpenedBy: uid(r[3]),
 		OpenedByName: str(r[4]), OpeningFloatFils: i64(r[5])}
 	if r[6] != nil {
-		closed, by, name, counted := parseTS(r[6]).UTC(), uid(r[7]), str(r[8]), i64(r[9])
-		d.ClosedAt, d.ClosedBy, d.ClosedByName, d.CountedCashFils = &closed, &by, &name, &counted
+		closed := parseTS(r[6]).UTC()
+		d.ClosedAt = &closed
+		if r[7] != nil { // closed by someone, not by itself
+			by, name := uid(r[7]), str(r[8])
+			d.ClosedBy, d.ClosedByName = &by, &name
+		}
+		if r[9] != nil { // counted
+			counted := i64(r[9])
+			d.CountedCashFils = &counted
+		}
 	}
 	return d, nil
 }
@@ -244,4 +255,21 @@ func (s *Store) refundEvent(ctx context.Context, id string) (*api.RefundEvent, e
 		ev.Lines = append(ev.Lines, api.RefundLineEvent{OrderLineId: uid(l[0]), Qty: int(i64(l[1])), AmountFils: i64(l[2])})
 	}
 	return ev, nil
+}
+
+func (s *Store) cashMovementEvent(ctx context.Context, id string) (*api.CashMovementEvent, error) {
+	rows, err := s.query(ctx, `SELECT m.business_day_id, m.created_at, m.staff_id, COALESCE(st.name, ''),
+		m.approved_by, COALESCE(a.name, ''), m.amount_fils, m.reason
+		FROM cash_movements m LEFT JOIN staff st ON st.id = m.staff_id LEFT JOIN staff a ON a.id = m.approved_by
+		WHERE m.id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows.Values) == 0 {
+		return nil, errNotFound
+	}
+	r := rows.Values[0]
+	return &api.CashMovementEvent{Id: uid(id), BusinessDayId: uid(r[0]), CreatedAt: parseTS(r[1]).UTC(),
+		StaffId: uid(r[2]), StaffName: str(r[3]), ApprovedBy: uid(r[4]), ApprovedByName: str(r[5]),
+		AmountFils: i64(r[6]), Reason: str(r[7])}, nil
 }

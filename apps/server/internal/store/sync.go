@@ -138,31 +138,36 @@ func reject(format string, args ...any) error {
 func (s *Store) ApplyEvent(ctx context.Context, t Terminal, ev api.Event) error {
 	return s.inTx(ctx, func(tx pgx.Tx) error {
 		switch ev.Type {
-		case api.BusinessDay:
+		case api.EventTypeBusinessDay:
 			if ev.BusinessDay == nil {
 				return reject("a business_day event needs businessDay")
 			}
 			return applyDay(ctx, tx, t, *ev.BusinessDay)
-		case api.Order:
+		case api.EventTypeOrder:
 			if ev.Order == nil {
 				return reject("an order event needs order")
 			}
 			return applyOrder(ctx, tx, t, *ev.Order)
-		case api.OrderVoid:
+		case api.EventTypeOrderVoid:
 			if ev.OrderVoid == nil {
 				return reject("an order_void event needs orderVoid")
 			}
 			return applyVoid(ctx, tx, t, *ev.OrderVoid)
-		case api.Refund:
+		case api.EventTypeRefund:
 			if ev.Refund == nil {
 				return reject("a refund event needs refund")
 			}
 			return applyRefund(ctx, tx, t, *ev.Refund)
-		case api.StaffPin:
+		case api.EventTypeStaffPin:
 			if ev.StaffPin == nil {
 				return reject("a staff_pin event needs staffPin")
 			}
 			return applyStaffPIN(ctx, tx, t, *ev.StaffPin)
+		case api.EventTypeCashMovement:
+			if ev.CashMovement == nil {
+				return reject("a cash_movement event needs cashMovement")
+			}
+			return applyCashMovement(ctx, tx, t, *ev.CashMovement)
 		}
 		return reject("unknown event type %q", ev.Type)
 	})
@@ -282,6 +287,21 @@ func applyRefund(ctx context.Context, tx pgx.Tx, t Terminal, r api.RefundEvent) 
 		}
 	}
 	return nil
+}
+
+func applyCashMovement(ctx context.Context, tx pgx.Tx, t Terminal, m api.CashMovementEvent) error {
+	if m.AmountFils == 0 {
+		return reject("cash movement %s has no amount", m.Id)
+	}
+	if err := dayOfShop(ctx, tx, t, m.BusinessDayId); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO cash_movements (id, org_id, shop_id, terminal_id, business_day_id, created_at,
+		staff_id, staff_name, approved_by, approved_by_name, amount_fils, reason)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (id) DO NOTHING`,
+		m.Id, t.OrgID, t.ShopID, t.ID, m.BusinessDayId, m.CreatedAt, m.StaffId, m.StaffName,
+		m.ApprovedBy, m.ApprovedByName, m.AmountFils, m.Reason)
+	return err
 }
 
 // applyStaffPIN takes a PIN someone chose at a till, if their PIN is still

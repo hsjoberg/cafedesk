@@ -36,6 +36,23 @@ type Config struct {
 	BackupDir string `json:"backupDir"` // where backups go; defaultBackupDir() when empty
 
 	FullScreen bool `json:"fullScreen"`
+
+	// DayEnds is when a day still open closes by itself, without a count:
+	// "04:00", or "off". Empty is the default, defaultDayEnds.
+	DayEnds string `json:"dayEnds"`
+}
+
+const (
+	defaultDayEnds = "04:00"
+	dayEndsOff     = "off"
+)
+
+// dayEnds is when a day still open closes by itself, or dayEndsOff.
+func (c Config) dayEnds() string {
+	if c.DayEnds == "" {
+		return defaultDayEnds
+	}
+	return c.DayEnds
 }
 
 // Printer roles.

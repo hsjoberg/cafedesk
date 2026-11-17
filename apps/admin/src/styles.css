@@ -613,6 +613,12 @@ fieldset.bare {
 .panel > p {
   margin: 0;
 }
+/* A second part of a panel, under its first: cash in and out under the counts. */
+.panel .subhead {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  margin-top: 12px;
+}
 .panel > .btn {
   justify-self: start;
 }

@@ -23,7 +23,7 @@ func (a *app) view(c *ui.Context) {
 			a.settingsView(c)
 		case a.screen == screenChecks:
 			a.checksView(c)
-		case a.day == nil:
+		case a.firstDay:
 			a.startDayView(c)
 		case a.screen == screenOrders:
 			a.ordersView(c)
@@ -34,6 +34,9 @@ func (a *app) view(c *ui.Context) {
 		}
 		if a.pinChange != nil && !a.pinChange.forced {
 			overlay(c, func() { a.pinChangePanel(c) })
+		}
+		if a.cashMove != nil && a.approval == nil {
+			overlay(c, func() { a.cashMovePanel(c) })
 		}
 		if a.approval != nil {
 			overlay(c, func() { a.approvalPanel(c) })
@@ -53,7 +56,10 @@ func (a *app) lockView(c *ui.Context) {
 	ui.Row(c).Fill().Padding(32).Gap(72).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
 		ui.Column(c).Width(380).Gap(10).Children(func() {
 			ui.Text(c, a.cfg.ShopName).FontSize(fsTotal).FontWeight(wBold)
-			status := "No day is open. Sign in to start one."
+			status := "No day is open. The next sale starts one."
+			if a.firstDay {
+				status = "No day yet. Sign in to start the till's first."
+			}
 			if a.day != nil {
 				status = fmt.Sprintf("Day open since %s, started by %s.", a.day.OpenedAt.Format("15:04"), a.day.OpenedBy)
 			}
@@ -80,7 +86,9 @@ func (a *app) lockView(c *ui.Context) {
 	})
 }
 
-// startDayView opens a business day: count the float into the drawer.
+// startDayView opens the till's first day: count the cash into the drawer.
+// After that, days start with their first sale, from what the drawer
+// carries over.
 func (a *app) startDayView(c *ui.Context) {
 	ui.Column(c).Fill().Padding(16, 20).Children(func() {
 		ui.Row(c).Gap(8).Children(func() {
@@ -97,11 +105,11 @@ func (a *app) startDayView(c *ui.Context) {
 		})
 		ui.Box(c).Grow(1).Center().Children(func() {
 			ui.Column(c).Width(620).Background(colTile).Radius(10).Padding(28).Gap(18).Children(func() {
-				ui.Text(c, "No day is open").FontSize(fsKey).FontWeight(wBold)
+				ui.Text(c, "The till's first day").FontSize(fsKey).FontWeight(wBold)
 				ui.Row(c).Gap(24).AlignItems(ui.Stretch).Children(func() {
 					ui.Column(c).Grow(1).Gap(6).Children(func() {
-						ui.Text(c, "Count the cash in the drawer and enter it. Closing the day compares the drawer with it.").
-							TextColor(colInkMuted)
+						ui.Text(c, "Count the cash in the drawer and enter it. From then on the till keeps track of it: "+
+							"each day starts with what the day before left.").TextColor(colInkMuted)
 						ui.Text(c, "Cash in the drawer").FontSize(fsMeta).TextColor(colInkMuted).Margin(16, 0, 0, 0)
 						amount := ui.Text(c, a.float.value().String()).FontSize(fsTotal).FontWeight(wBold).FontFeatures("tnum")
 						if a.float.text == "" {

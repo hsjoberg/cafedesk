@@ -69,7 +69,13 @@ type app struct {
 	pairing *pairState
 
 	staff *Staff       // signed in; nil while locked
-	day   *BusinessDay // the open day; nil until it is started
+	day   *BusinessDay // the open day; nil until the next sale starts one
+	// firstDay is a till that has never had a day: its first starts with a
+	// count of the drawer. After that, a day starts with the next sale,
+	// from what the drawer carries over.
+	firstDay bool
+	carry    money.Fils // what the drawer should hold while no day is open
+	closing  bool       // the day is closing by itself
 
 	screen   screen
 	sheet    sheet
@@ -98,10 +104,11 @@ type app struct {
 	pinChange *pinChange
 	keyboard  *keyboard
 
-	float   amountEntry // starting the day
-	counted amountEntry // closing the day
-	dayErr  string
-	report  *DayReport
+	float    amountEntry // starting the till's first day
+	counted  amountEntry // closing the day
+	dayErr   string
+	report   *DayReport
+	cashMove *cashMoveState
 
 	orders    []OrderSummary
 	ordersErr string
@@ -215,6 +222,11 @@ func (a *app) attach(win *mygo.Window) {
 	go func() {
 		for range time.Tick(30 * time.Second) {
 			mygo.RunOnMain(a.syncNow)
+		}
+	}()
+	go func() {
+		for range time.Tick(time.Minute) {
+			mygo.RunOnMain(a.checkDayEnd)
 		}
 	}()
 }
@@ -358,20 +370,30 @@ func (a *app) lockTill() {
 	a.settings.by = nil
 }
 
-// loadDay reads the open day, and the next order number in it.
+// loadDay reads the open day, and the next order number in it, first
+// closing it if its end of day has passed. With no day open, it reads what
+// the drawer carries over to the next.
 func (a *app) loadDay() {
-	store := a.store
+	store, ends := a.store, a.cfg.dayEnds()
 	if store == nil {
 		return
 	}
 	a.async(func() func() {
 		ctx := context.Background()
-		day, open, err := store.OpenDay(ctx)
+		_, err := store.CloseIfOver(ctx, ends, time.Now())
+		var day BusinessDay
+		var open, had bool
+		var carry money.Fils
 		next := 1
+		if err == nil {
+			day, open, err = store.OpenDay(ctx)
+		}
 		if err == nil && open {
 			if n, nerr := store.NextOrderNumber(ctx, day.ID); nerr == nil {
 				next = n
 			}
+		} else if err == nil {
+			carry, had, err = store.CarryOver(ctx)
 		}
 		return func() {
 			if err != nil {
@@ -382,12 +404,58 @@ func (a *app) loadDay() {
 			if open {
 				a.day = &day
 			}
+			a.firstDay = !open && !had
+			a.carry = carry
 			a.nextNumber = next
 		}
 	})
 }
 
-// startDay opens a business day with the float counted into the drawer.
+// checkDayEnd closes the open day by itself once its end of day has
+// passed, without a count, and locks the till: the next person to sign in
+// starts afresh, and the next sale starts the next day.
+func (a *app) checkDayEnd() {
+	if a.day == nil || a.store == nil || a.closing || a.saving {
+		return
+	}
+	end, ok := dayEndAfter(a.day.OpenedAt, a.cfg.dayEnds())
+	if !ok || time.Now().Before(end) {
+		return
+	}
+	store, ends := a.store, a.cfg.dayEnds()
+	a.closing = true
+	a.async(func() func() {
+		r, err := store.CloseIfOver(context.Background(), ends, time.Now())
+		return func() {
+			a.closing = false
+			if err != nil {
+				a.dayErr = "The day didn't close by itself: " + err.Error()
+				return
+			}
+			if r != nil {
+				a.dayClosed(*r)
+				a.lockTill()
+			}
+		}
+	})
+}
+
+// dayClosed clears the screen of a day that closed, by hand or by itself.
+func (a *app) dayClosed(r DayReport) {
+	a.backupNow()
+	a.syncNow()
+	a.day, a.report = nil, nil
+	a.carry = r.ExpectedCash()
+	if r.Day.Counted {
+		a.carry = r.Day.CountedCash
+	}
+	a.nextNumber = 1
+	a.counted = amountEntry{}
+	a.screen = screenOrder
+	a.lastCode, a.lastOrder = "", nil
+}
+
+// startDay opens the till's first day with the cash counted in the drawer.
 func (a *app) startDay() {
 	if a.store == nil || a.staff == nil {
 		a.dayErr = a.storeError().Error()
@@ -401,7 +469,7 @@ func (a *app) startDay() {
 				a.dayErr = "The day didn't start: " + err.Error()
 				return
 			}
-			a.day, a.dayErr, a.nextNumber = &d, "", 1
+			a.day, a.dayErr, a.nextNumber, a.firstDay = &d, "", 1, false
 			a.float = amountEntry{}
 			a.syncNow()
 		}
@@ -673,7 +741,7 @@ func (a *app) cancelPayment() {
 }
 
 func (a *app) canComplete() bool {
-	if a.saving || a.cart.Empty() || a.day == nil || a.staff == nil {
+	if a.saving || a.cart.Empty() || a.firstDay || a.staff == nil {
 		return false
 	}
 	return a.method == payCard || a.tendered.value() >= a.cart.Total()
@@ -707,8 +775,6 @@ func (a *app) completeSale() {
 		OrgID:      a.cfg.OrgID,
 		ShopID:     a.cfg.ShopID,
 		TerminalID: a.cfg.TerminalID,
-		DayID:      a.day.ID,
-		DayDate:    a.day.Date,
 		Number:     a.nextNumber,
 		Code:       a.currentCode(),
 		CreatedAt:  now,
@@ -727,13 +793,29 @@ func (a *app) completeSale() {
 	}
 	a.saving = true
 	a.payErr = ""
-	store, storeErr := a.store, a.storeError()
+	store, storeErr, cfg, by := a.store, a.storeError(), a.cfg, *a.staff
+	seen := "" // the day the screen shows, whose next number it has
+	if a.day != nil {
+		seen = a.day.ID
+	}
 	a.async(func() func() {
 		ctx := context.Background()
 		err := storeErr
+		var day BusinessDay
 		next := o.Number + 1
 		if store != nil {
-			err = store.SaveOrder(ctx, &o)
+			// The first sale after a close starts the next day.
+			day, _, err = store.EnsureDay(ctx, cfg, by, now)
+			if err == nil && day.ID != seen {
+				var n int
+				if n, err = store.NextOrderNumber(ctx, day.ID); err == nil {
+					o.Number, o.Code = n, orderCode(cfg.TerminalCode, n)
+				}
+			}
+			if err == nil {
+				o.DayID, o.DayDate = day.ID, day.Date
+				err = store.SaveOrder(ctx, &o)
+			}
 			if n, nerr := store.NextOrderNumber(ctx, o.DayID); err == nil && nerr == nil {
 				next = n
 			}
@@ -743,6 +825,9 @@ func (a *app) completeSale() {
 			if err != nil {
 				a.payErr = "Order not saved: " + err.Error()
 				return
+			}
+			if day.ID != "" {
+				a.day = &day
 			}
 			a.sheet = sheetNone
 			a.clearOrder()

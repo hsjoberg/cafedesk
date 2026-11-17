@@ -95,11 +95,11 @@ func TestUsage(t *testing.T) {
 	o2 := order(2, ol(karak, 5))
 	var res api.EventResult
 	till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{
-		{Seq: 1, Type: api.BusinessDay, BusinessDay: &api.BusinessDayEvent{Id: day, Date: "2026-11-12", OpenedAt: at,
+		{Seq: 1, Type: api.EventTypeBusinessDay, BusinessDay: &api.BusinessDayEvent{Id: day, Date: "2026-11-12", OpenedAt: at,
 			OpenedBy: manager.Id, OpenedByName: "Ravi"}},
-		{Seq: 2, Type: api.Order, Order: &o1},
-		{Seq: 3, Type: api.Order, Order: &o2},
-		{Seq: 4, Type: api.OrderVoid, OrderVoid: &api.OrderVoidEvent{OrderId: o2.Id, VoidedAt: at, VoidedBy: manager.Id,
+		{Seq: 2, Type: api.EventTypeOrder, Order: &o1},
+		{Seq: 3, Type: api.EventTypeOrder, Order: &o2},
+		{Seq: 4, Type: api.EventTypeOrderVoid, OrderVoid: &api.OrderVoidEvent{OrderId: o2.Id, VoidedAt: at, VoidedBy: manager.Id,
 			VoidedByName: "Ravi", Reason: "Test"}},
 	}}, &res, bearer(token)...)
 	if len(res.Accepted) != 4 {

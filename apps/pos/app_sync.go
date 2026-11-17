@@ -138,6 +138,7 @@ func (a *app) pair(code string) {
 			if first {
 				a.synced = false
 				a.day, a.lastOrder, a.lastCode, a.nextNumber = nil, nil, "", 1
+				a.firstDay, a.carry = true, 0
 				a.setCatalog(&Catalog{Groups: map[string]ModifierGroup{}})
 			}
 			msg := fmt.Sprintf("Connected as %s of %s.", pairing.Terminal.Code, pairing.Shop.Name)

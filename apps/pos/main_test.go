@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"cafedesk/apps/pos/api"
 	"cafedesk/pkg/money"
 
 	"github.com/egoist/mygo/ui"
@@ -377,8 +379,155 @@ func TestCloseDay(t *testing.T) {
 		t.Error("closing the day made no backup")
 	}
 	tt.Frame()
-	if !tt.HasText("Start the day") {
-		t.Errorf("no start of the next day; texts %q", tt.Texts())
+	if !tt.HasText("No day open. The next sale starts one.") && !tt.HasText("Tap an item to start an order.") {
+		t.Errorf("not back to selling; texts %q", tt.Texts())
+	}
+
+	// The next sale starts the next day, with the drawer as counted.
+	a.addItem(a.catalog.ItemsIn("meals")[0])
+	a.startPayment()
+	a.tendered.set(money.FromDirhams(14))
+	a.completeSale()
+	if a.day == nil || a.day.OpeningFloat != 11000 || a.lastCode != "T1-001" {
+		t.Fatalf("next day %+v, order %q, err %q", a.day, a.lastCode, a.payErr)
+	}
+}
+
+func TestCloseWithoutCounting(t *testing.T) {
+	a, p := newTestApp(t)
+	openTill(t, a)
+	a.addItem(a.catalog.ItemsIn("meals")[0])
+	a.startPayment()
+	a.tendered.set(money.FromDirhams(14))
+	a.completeSale() // 14.00 in cash
+
+	tt := ui.NewTester(a.view, 1366, 768)
+	mustClick(t, tt, "Owner")
+	mustClick(t, tt, "Day report")
+	mustClick(t, tt, "Close without counting")
+	if a.day != nil {
+		t.Fatalf("day still open: %s", a.dayErr)
+	}
+	if z := p.text(roleReceipt); !strings.Contains(z, "not counted") || strings.Contains(z, "Short") {
+		t.Errorf("Z report:\n%s", z)
+	}
+	// What the drawer should hold carries over to the next day.
+	if a.carry != 11400 {
+		t.Errorf("carry %s", a.carry)
+	}
+	a.addItem(a.catalog.Items[0])
+	a.startPayment()
+	a.method = payCard
+	a.completeSale()
+	if a.day == nil || a.day.OpeningFloat != 11400 {
+		t.Fatalf("next day %+v, err %q", a.day, a.payErr)
+	}
+}
+
+func TestCashInOrOut(t *testing.T) {
+	a, _ := newTestApp(t)
+	openTill(t, a)
+	tt := ui.NewTester(a.view, 1366, 768)
+	mustClick(t, tt, "Owner")
+	mustClick(t, tt, "Day report")
+	mustClick(t, tt, "Cash in or out")
+	mustClick(t, tt, "Take out")
+	for _, k := range []string{"4", "0"} {
+		mustClick(t, tt, k)
+	}
+	mustClick(t, tt, "Take out AED 40.00")
+	if !tt.HasText("Choose a reason.") {
+		t.Fatalf("saved without a reason; texts %q", tt.Texts())
+	}
+	mustClick(t, tt, "Banked")
+	mustClick(t, tt, "Take out AED 40.00")
+	if a.cashMove != nil {
+		t.Fatalf("not saved: %s", a.cashMove.err)
+	}
+	tt.Frame()
+	if !tt.HasText("Taken out, Banked") || !tt.HasText("Expected: 60.00") {
+		t.Errorf("not on the report; texts %q", tt.Texts())
+	}
+	events, _ := a.store.PendingEvents(context.Background(), 100)
+	last := events[len(events)-1]
+	if last.CashMovement == nil || last.CashMovement.AmountFils != -4000 || last.CashMovement.Reason != "Banked" ||
+		last.CashMovement.ApprovedByName != "Owner" {
+		t.Errorf("sent %+v", last)
+	}
+}
+
+func TestDayEndsByItself(t *testing.T) {
+	a, _ := newTestApp(t)
+	openTill(t, a)
+	ctx := context.Background()
+	mgr := *a.staff
+	// A day opened at 10:00 two days ago, still open: its end of day passed.
+	a.store.CloseDay(ctx, a.day.ID, a.staff, nil, a.day.OpenedAt)
+	y := time.Now().AddDate(0, 0, -2)
+	opened := time.Date(y.Year(), y.Month(), y.Day(), 10, 0, 0, 0, time.Local)
+	day, err := a.store.StartDay(ctx, a.cfg, *a.staff, 5000, opened)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.day = &day
+	a.cfg.DayEnds = "04:00"
+	a.checkDayEnd()
+	if a.day != nil || a.staff != nil {
+		t.Fatalf("still open %+v, signed in %+v", a.day, a.staff)
+	}
+	got, _ := a.store.Day(ctx, day.ID)
+	want := opened.AddDate(0, 0, 1).Add(-6 * time.Hour) // 04:00 the next day
+	if !got.Auto() || got.Counted || !got.ClosedAt.Equal(want) {
+		t.Errorf("closed %+v, want at %s, by itself, uncounted", got, want)
+	}
+	if a.carry != 5000 {
+		t.Errorf("carry %s", a.carry)
+	}
+	// It goes to the admin closed, by no one, uncounted.
+	events, err := a.store.PendingEvents(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sent *api.BusinessDayEvent
+	for _, ev := range events {
+		if ev.BusinessDay != nil && ev.BusinessDay.Id.String() == day.ID {
+			sent = ev.BusinessDay
+		}
+	}
+	if sent == nil || sent.ClosedAt == nil || sent.ClosedBy != nil || sent.ClosedByName != nil || sent.CountedCashFils != nil {
+		t.Errorf("sent %+v", sent)
+	}
+
+	// Never: a day stays open.
+	a.cfg.DayEnds = dayEndsOff
+	if _, err := a.store.StartDay(ctx, a.cfg, mgr, 0, opened); err != nil {
+		t.Fatal(err)
+	}
+	if r, err := a.store.CloseIfOver(ctx, a.cfg.dayEnds(), time.Now()); r != nil || err != nil {
+		t.Errorf("closed with no end of day: %v", err)
+	}
+	if _, open, _ := a.store.OpenDay(ctx); !open {
+		t.Error("the day didn't stay open")
+	}
+}
+
+func TestDayEndAfter(t *testing.T) {
+	at := func(d, h, m int) time.Time { return time.Date(2026, 11, d, h, m, 0, 0, time.Local) }
+	for _, c := range []struct {
+		opened time.Time
+		want   time.Time
+	}{
+		{at(17, 7, 10), at(18, 4, 0)},  // a day from the morning
+		{at(17, 23, 30), at(18, 4, 0)}, // opened late
+		{at(18, 2, 0), at(18, 4, 0)},   // after midnight, before the end
+		{at(18, 4, 0), at(19, 4, 0)},   // at the end exactly: the next one
+	} {
+		if got, ok := dayEndAfter(c.opened, "04:00"); !ok || !got.Equal(c.want) {
+			t.Errorf("opened %s: %s, want %s", c.opened, got, c.want)
+		}
+	}
+	if _, ok := dayEndAfter(at(17, 7, 0), dayEndsOff); ok {
+		t.Error("an end of day when off")
 	}
 }
 

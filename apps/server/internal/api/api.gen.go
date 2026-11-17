@@ -41,25 +41,28 @@ func (e Area) Valid() bool {
 
 // Defines values for EventType.
 const (
-	BusinessDay EventType = "business_day"
-	Order       EventType = "order"
-	OrderVoid   EventType = "order_void"
-	Refund      EventType = "refund"
-	StaffPin    EventType = "staff_pin"
+	EventTypeBusinessDay  EventType = "business_day"
+	EventTypeCashMovement EventType = "cash_movement"
+	EventTypeOrder        EventType = "order"
+	EventTypeOrderVoid    EventType = "order_void"
+	EventTypeRefund       EventType = "refund"
+	EventTypeStaffPin     EventType = "staff_pin"
 )
 
 // Valid indicates whether the value is a known member of the EventType enum.
 func (e EventType) Valid() bool {
 	switch e {
-	case BusinessDay:
+	case EventTypeBusinessDay:
 		return true
-	case Order:
+	case EventTypeCashMovement:
 		return true
-	case OrderVoid:
+	case EventTypeOrder:
 		return true
-	case Refund:
+	case EventTypeOrderVoid:
 		return true
-	case StaffPin:
+	case EventTypeRefund:
+		return true
+	case EventTypeStaffPin:
 		return true
 	default:
 		return false
@@ -224,7 +227,12 @@ type BatchInput struct {
 	YieldPortions float64 `json:"yieldPortions"`
 }
 
-// BusinessDayEvent A day as it stands, opened or closed.
+// BusinessDayEvent A day as it stands, opened or closed. The opening float is what the
+// drawer held at the start: counted on a till's first day, and after
+// that carried over from the day before (its count, or what it should
+// have held if it wasn't counted). A day that closed by itself, at the
+// till's end of day, has no closedBy. A day closed without a count has
+// no countedCashFils.
 type BusinessDayEvent struct {
 	ClosedAt        *time.Time          `json:"closedAt,omitempty"`
 	ClosedBy        *openapi_types.UUID `json:"closedBy,omitempty"`
@@ -238,6 +246,34 @@ type BusinessDayEvent struct {
 	OpenedBy         openapi_types.UUID `json:"openedBy"`
 	OpenedByName     string             `json:"openedByName"`
 	OpeningFloatFils int64              `json:"openingFloatFils"`
+}
+
+// CashMovement defines model for CashMovement.
+type CashMovement struct {
+	// AmountFils Above 0 put in, below 0 taken out.
+	AmountFils     int64     `json:"amountFils"`
+	ApprovedByName string    `json:"approvedByName"`
+	CreatedAt      time.Time `json:"createdAt"`
+
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date         LocalDate          `json:"date"`
+	Id           openapi_types.UUID `json:"id"`
+	Reason       string             `json:"reason"`
+	StaffName    string             `json:"staffName"`
+	TerminalCode string             `json:"terminalCode"`
+}
+
+// CashMovementEvent Cash put into the drawer (amountFils above 0) or taken out of it (below 0), not by a sale.
+type CashMovementEvent struct {
+	AmountFils     int64              `json:"amountFils"`
+	ApprovedBy     openapi_types.UUID `json:"approvedBy"`
+	ApprovedByName string             `json:"approvedByName"`
+	BusinessDayId  openapi_types.UUID `json:"businessDayId"`
+	CreatedAt      time.Time          `json:"createdAt"`
+	Id             openapi_types.UUID `json:"id"`
+	Reason         string             `json:"reason"`
+	StaffId        openapi_types.UUID `json:"staffId"`
+	StaffName      string             `json:"staffName"`
 }
 
 // Catalog defines model for Catalog.
@@ -290,22 +326,30 @@ type Changes struct {
 
 // DayClose defines model for DayClose.
 type DayClose struct {
-	CashRefundsFils int64 `json:"cashRefundsFils"`
-	CashSalesFils   int64 `json:"cashSalesFils"`
+	// CashMovementsFils Cash put in, less cash taken out, other than by sales and refunds.
+	CashMovementsFils int64 `json:"cashMovementsFils"`
+	CashRefundsFils   int64 `json:"cashRefundsFils"`
+	CashSalesFils     int64 `json:"cashSalesFils"`
 
 	// ClosedAt Missing while the day is open, or its close hasn't been sent yet.
-	ClosedAt     *time.Time `json:"closedAt,omitempty"`
-	ClosedByName *string    `json:"closedByName,omitempty"`
-	CountedFils  *int64     `json:"countedFils,omitempty"`
+	ClosedAt *time.Time `json:"closedAt,omitempty"`
+
+	// ClosedByName Missing when the day closed by itself, at the till's end of day.
+	ClosedByName *string `json:"closedByName,omitempty"`
+	CountedFils  *int64  `json:"countedFils,omitempty"`
 
 	// Date A date in the shop's own time, YYYY-MM-DD.
 	Date LocalDate `json:"date"`
 
-	// DifferenceFils Counted less expected; below 0 is short.
+	// DifferenceFils Counted less expected; below 0 is short. As each day starts with
+	// what the day before should have left, it covers every day since
+	// the till's last count.
 	DifferenceFils *int64 `json:"differenceFils,omitempty"`
 
-	// ExpectedFils The float, plus cash sales, less cash refunds.
-	ExpectedFils int64              `json:"expectedFils"`
+	// ExpectedFils The float, plus cash sales, less cash refunds, plus cash put in less taken out.
+	ExpectedFils int64 `json:"expectedFils"`
+
+	// FloatFils What the drawer held at the start, counted or carried over from the day before.
 	FloatFils    int64              `json:"floatFils"`
 	Id           openapi_types.UUID `json:"id"`
 	OpenedAt     time.Time          `json:"openedAt"`
@@ -340,11 +384,19 @@ type Error struct {
 
 // Event One thing that happened on the till; the field named by `type` holds it.
 type Event struct {
-	// BusinessDay A day as it stands, opened or closed.
+	// BusinessDay A day as it stands, opened or closed. The opening float is what the
+	// drawer held at the start: counted on a till's first day, and after
+	// that carried over from the day before (its count, or what it should
+	// have held if it wasn't counted). A day that closed by itself, at the
+	// till's end of day, has no closedBy. A day closed without a count has
+	// no countedCashFils.
 	BusinessDay *BusinessDayEvent `json:"businessDay,omitempty"`
-	Order       *OrderEvent       `json:"order,omitempty"`
-	OrderVoid   *OrderVoidEvent   `json:"orderVoid,omitempty"`
-	Refund      *RefundEvent      `json:"refund,omitempty"`
+
+	// CashMovement Cash put into the drawer (amountFils above 0) or taken out of it (below 0), not by a sale.
+	CashMovement *CashMovementEvent `json:"cashMovement,omitempty"`
+	Order        *OrderEvent        `json:"order,omitempty"`
+	OrderVoid    *OrderVoidEvent    `json:"orderVoid,omitempty"`
+	Refund       *RefundEvent       `json:"refund,omitempty"`
 
 	// Seq The till's number for the event, increasing.
 	Seq int64 `json:"seq"`
@@ -879,6 +931,9 @@ type RefundLineEvent struct {
 
 // SalesReport defines model for SalesReport.
 type SalesReport struct {
+	// CashMovements Cash put into or taken out of the tills' drawers, latest first.
+	CashMovements []CashMovement `json:"cashMovements"`
+
 	// Closes Each till's business days, latest first, with their cash counts.
 	Closes []DayClose `json:"closes"`
 

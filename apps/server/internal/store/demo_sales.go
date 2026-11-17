@@ -21,10 +21,13 @@ type DemoStaff struct {
 
 // SeedDemoSales adds two tills to a shop, as if connected, and the given
 // number of days of made-up sales on them, up to now in the shop's time:
-// business days with their cash counts (the odd one short or over), orders
-// from the organization's menu shaped like a cafeteria's day, and a few
-// voids and refunds. The manager opens and closes the days; the cashiers
-// sell. It is for showing and trying the admin, never for a real shop.
+// business days whose drawer carries over from one to the next, closing by
+// themselves at 04:00 except on Sundays, when the manager counts the cash
+// (the odd count short or over); the week's takings banked from the drawer
+// on Thursdays; orders from the organization's menu shaped like a
+// cafeteria's day; and a few voids and refunds. The manager opens the days;
+// the cashiers sell. It is for showing and trying the admin, never for a
+// real shop.
 func (s *Store) SeedDemoSales(ctx context.Context, orgID, shopID uuid.UUID, manager DemoStaff, cashiers []DemoStaff,
 	days int, now time.Time, seed uint64) error {
 	cat, err := s.Catalog(ctx, orgID)
@@ -82,7 +85,8 @@ func (s *Store) SeedDemoSales(ctx context.Context, orgID, shopID uuid.UUID, mana
 				today.AddDate(0, 0, -days), now.Add(-t.seen)); err != nil {
 				return err
 			}
-			var dayRows, orderRows, lineRows, refundRows, refundLineRows [][]any
+			var dayRows, orderRows, lineRows, refundRows, refundLineRows, movementRows [][]any
+			drawer := int64(20000) // the first day's count
 			for d := days - 1; d >= 0; d-- {
 				date := today.AddDate(0, 0, -d)
 				weekend := date.Weekday() == time.Friday || date.Weekday() == time.Saturday
@@ -147,19 +151,33 @@ func (s *Store) SeedDemoSales(ctx context.Context, orgID, shopID uuid.UUID, mana
 						}
 					}
 				}
-				const float = 20000
 				day := pgtype.Date{Time: time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC), Valid: true}
 				row := []any{dayID, orgID, shopID, id, day, opened, manager.ID, manager.Name,
-					int64(float), nil, nil, nil, nil}
-				if d > 0 { // today stays open
-					counted := float + cash - refundCash
+					drawer, nil, nil, nil, nil}
+				expected := drawer + cash - refundCash
+				// Thursday evening, the week's takings go to the bank, leaving 200 in the drawer.
+				banked := time.Date(date.Year(), date.Month(), date.Day(), 21, 0, 0, 0, loc)
+				if date.Weekday() == time.Thursday && banked.Before(now) && expected > 30000 {
+					out := (expected - 20000) / 10000 * 10000
+					movementRows = append(movementRows, []any{newID(), orgID, shopID, id, dayID, banked,
+						manager.ID, manager.Name, manager.ID, manager.Name, -out, "Banked"})
+					expected -= out
+				}
+				drawer = expected
+				switch {
+				case d == 0: // today stays open
+				case date.Weekday() == time.Sunday: // counted, at the close
+					counted := expected
 					switch r := rng.Float64(); {
-					case r < 0.12:
+					case r < 0.4:
 						counted -= int64(rng.IntN(40)+1) * 50
-					case r < 0.18:
+					case r < 0.55:
 						counted += 500
 					}
-					row[9], row[10], row[11], row[12] = date.Add(23*time.Hour+40*time.Minute), manager.ID, manager.Name, counted
+					row[9], row[10], row[11], row[12] = date.Add(23*time.Hour+50*time.Minute), manager.ID, manager.Name, counted
+					drawer = counted
+				default: // closed by itself, at 04:00
+					row[9] = date.AddDate(0, 0, 1).Add(4 * time.Hour)
 				}
 				dayRows = append(dayRows, row)
 			}
@@ -178,6 +196,8 @@ func (s *Store) SeedDemoSales(ctx context.Context, orgID, shopID uuid.UUID, mana
 				{"refunds", []string{"id", "org_id", "shop_id", "terminal_id", "order_id", "business_day_id", "created_at",
 					"staff_id", "staff_name", "approved_by", "approved_by_name", "reason", "method", "total_fils"}, refundRows},
 				{"refund_lines", []string{"refund_id", "order_line_id", "qty", "amount_fils"}, refundLineRows},
+				{"cash_movements", []string{"id", "org_id", "shop_id", "terminal_id", "business_day_id", "created_at",
+					"staff_id", "staff_name", "approved_by", "approved_by_name", "amount_fils", "reason"}, movementRows},
 			} {
 				if _, err := tx.CopyFrom(ctx, pgx.Identifier{c.table}, c.cols, pgx.CopyFromRows(c.rows)); err != nil {
 					return fmt.Errorf("%s: %w", c.table, err)

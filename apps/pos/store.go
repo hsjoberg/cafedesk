@@ -107,6 +107,17 @@ var schema = [][]string{
 		// What an event must carry as it was, such as the PIN a change replaced.
 		`ALTER TABLE outbox ADD COLUMN payload TEXT`,
 	},
+	// 3: the drawer carries over from day to day, and cash put in or taken
+	// out. A day closed with no closed_by closed by itself; one with no
+	// counted_cash_fils wasn't counted.
+	{
+		`CREATE TABLE cash_movements (
+			id TEXT PRIMARY KEY, org_id TEXT NOT NULL, shop_id TEXT NOT NULL, terminal_id TEXT NOT NULL,
+			business_day_id TEXT NOT NULL REFERENCES business_days(id), created_at TEXT NOT NULL,
+			staff_id TEXT NOT NULL REFERENCES staff(id), approved_by TEXT NOT NULL REFERENCES staff(id),
+			amount_fils INTEGER NOT NULL, reason TEXT NOT NULL)`,
+		`CREATE INDEX cash_movements_day ON cash_movements(business_day_id)`,
+	},
 }
 
 // OpenStore opens or creates pos.db in dir.

@@ -19,6 +19,7 @@ export type Terminal = Schemas["Terminal"];
 export type TerminalPairing = Schemas["TerminalPairing"];
 export type SalesReport = Schemas["SalesReport"];
 export type DayClose = Schemas["DayClose"];
+export type CashMovement = Schemas["CashMovement"];
 export type Area = Schemas["Area"];
 export type Product = Schemas["Product"];
 export type Supplier = Schemas["Supplier"];

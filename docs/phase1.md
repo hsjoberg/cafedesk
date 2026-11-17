@@ -13,8 +13,9 @@ demo mode (`CAFEDESK_DEMO=1`).
    `pos-phase0-<date>.db` in `%APPDATA%\Cafedesk POS` and a fresh one starts.
 2. The till opens locked. Sign in with **1234**: that's the **Owner**, a
    manager. The till then makes you choose your own PIN, typed twice.
-3. **Start the day**: count the cash in the drawer, type it, tap
-   **Start the day**.
+3. **The till's first day**: count the cash in the drawer, type it, tap
+   **Start the day**. This happens once. After that, a day starts with its
+   first sale, from what the day before left in the drawer.
 
 ## Selling
 
@@ -37,7 +38,7 @@ Tap your name at the top right:
 | Option | What it does | Who |
 |---|---|---|
 | Orders | The latest orders, each shown as its receipt. **Reprint**, **Refund** some or all of its items, or **Void** it. | Anyone; refunds and voids need a manager's PIN |
-| Day report | Sales so far. **Print day report** prints an X report. **Close the day**: count the cash, see if it's short or over, close. The Z report prints and a backup is made. | Closing needs a manager |
+| Day report | Sales so far. **Print day report** prints an X report. **Cash in or out**: cash put in or taken out other than by a sale (banked, a supplier paid, change added), with a reason. **Close the day**, with a count of the cash or without: a count shows short or over since the last count. The Z report prints and a backup is made. | Cash in or out and closing need a manager |
 | Settings | Shop name and receipt footer, receipt printer (paper width, drawer kick), kitchen printer, staff, backups, start-up and full screen. | Managers |
 | Checks | The Phase 0 tests: touch, scrolling, Arabic, database, server. | Anyone |
 | Change my PIN | | Anyone |
@@ -48,6 +49,22 @@ stays in the records, marked, and doesn't count in sales.
 
 A day stays open past midnight until it is closed, so late nights count as
 one day.
+
+### The drawer from day to day
+
+The cash in the drawer carries over: each day starts with what the day
+before left, counted or, if it wasn't, what it should have held. So the
+cash needn't be counted every day. Count it when you like, say on Sundays,
+by typing the count when closing the day; it is checked against every day
+since the last count. Days that aren't closed by hand close by themselves.
+
+- **End of the day** (Settings): a day still open closes by itself at this
+  time, 04:00 unless changed, without a count, and the till locks. Choose a
+  time after the shop closes and before it opens, or **Never**. If the till
+  is off then, the day closes when it next starts, dated at that time.
+- The next sale starts the next day. A day without sales is never made.
+- **Cash in or out** keeps a count right when cash leaves the drawer (or
+  goes in) other than by a sale or a refund.
 
 ## Staff
 
@@ -93,6 +110,12 @@ the database now (not in the code), so the sync only has to fill its tables.
 - [ ] Refund one of two karaks; the day report shows it, and the expected
       cash drops by 1.00.
 - [ ] Close the day with a wrong count: the Z report says short or over.
+- [ ] Close the day without counting: the Z report says not counted, and the
+      next sale starts a day with what the drawer should hold.
+- [ ] Take out cash as Banked: the day report shows it, and the expected cash
+      drops by it.
+- [ ] Leave a day open past the end of the day: it closes by itself and the
+      till locks.
 - [ ] A backup appears in the backup folder.
 - [ ] Scroll a long receipt and the Orders list with one finger.
 - [ ] The cash drawer opens on a cash sale (if a drawer is attached and the

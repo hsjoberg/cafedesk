@@ -98,10 +98,10 @@ func TestPurchases(t *testing.T) {
 		}}
 	var res api.EventResult
 	till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{
-		{Seq: 1, Type: api.BusinessDay, BusinessDay: &api.BusinessDayEvent{Id: day, Date: date, OpenedAt: now,
+		{Seq: 1, Type: api.EventTypeBusinessDay, BusinessDay: &api.BusinessDayEvent{Id: day, Date: date, OpenedAt: now,
 			OpenedBy: manager.Id, OpenedByName: "Ravi"}},
-		{Seq: 2, Type: api.Order, Order: &order},
-		{Seq: 3, Type: api.Refund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: order.Id, BusinessDayId: day, CreatedAt: now,
+		{Seq: 2, Type: api.EventTypeOrder, Order: &order},
+		{Seq: 3, Type: api.EventTypeRefund, Refund: &api.RefundEvent{Id: uuid.New(), OrderId: order.Id, BusinessDayId: day, CreatedAt: now,
 			StaffId: manager.Id, StaffName: "Ravi", ApprovedBy: manager.Id, ApprovedByName: "Ravi", Reason: "Other",
 			Method: api.Cash, TotalFils: 100, Lines: []api.RefundLineEvent{{OrderLineId: order.Lines[1].Id, Qty: 1, AmountFils: 100}}}},
 	}}, &res, bearer(token)...)

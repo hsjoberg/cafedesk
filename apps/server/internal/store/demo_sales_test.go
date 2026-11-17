@@ -110,10 +110,28 @@ func TestDemoSales(t *testing.T) {
 	if len(rep.Closes) != 20 {
 		t.Fatalf("%d days, want 20", len(rep.Closes))
 	}
-	for _, c := range rep.Closes {
-		if open := c.Date == "2026-11-16"; open != (c.ClosedAt == nil) || open != (c.DifferenceFils == nil) {
-			t.Errorf("day %s on %s: closed %v, difference %v", c.Date, c.TerminalCode, c.ClosedAt, c.DifferenceFils)
+	// Each day starts with what the day before left; only Sundays are
+	// counted, and the rest close by themselves.
+	left := map[string]int64{}
+	for i := len(rep.Closes) - 1; i >= 0; i-- { // oldest first
+		c := rep.Closes[i]
+		date, _ := time.Parse("2006-01-02", c.Date)
+		open, sunday := c.Date == "2026-11-16", date.Weekday() == time.Sunday
+		if open != (c.ClosedAt == nil) || (sunday && !open) != (c.DifferenceFils != nil) ||
+			(!sunday && !open) != (c.ClosedByName == nil && c.ClosedAt != nil) {
+			t.Errorf("day %s on %s: closed %v by %v, difference %v", c.Date, c.TerminalCode, c.ClosedAt,
+				c.ClosedByName, c.DifferenceFils)
 		}
+		if prev, ok := left[c.TerminalCode]; ok && c.FloatFils != prev {
+			t.Errorf("day %s on %s started with %d, the day before left %d", c.Date, c.TerminalCode, c.FloatFils, prev)
+		}
+		left[c.TerminalCode] = c.ExpectedFils
+		if c.CountedFils != nil {
+			left[c.TerminalCode] = *c.CountedFils
+		}
+	}
+	if len(rep.CashMovements) == 0 || rep.CashMovements[0].AmountFils >= 0 || rep.CashMovements[0].Reason != "Banked" {
+		t.Errorf("cash movements %+v", rep.CashMovements)
 	}
 	today, err := st.SalesReport(ctx, org, to, to, nil)
 	if err != nil {
