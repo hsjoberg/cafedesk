@@ -4,6 +4,44 @@ A simple point of sale for small shops, cafés and cafeterias: a touch-screen ap
 on the shop's Windows PC that works offline, a Go server with PostgreSQL that it
 syncs to (on Railway, or on a machine in the shop), and a web admin.
 
+## The till
+
+Taking an order: a tap per item, options such as sugar or spice, and the
+total to charge.
+
+![The till taking an order](docs/screenshots/till-order.png)
+
+The day report, with the cash counted against what the drawer should hold.
+
+![The till's day report](docs/screenshots/till-day.png)
+
+Receipts print in English and Arabic, drawn as a picture so any ESC/POS
+receipt printer can print the Arabic.
+
+<img src="docs/screenshots/receipt.png" alt="A receipt in English and Arabic" width="360">
+
+## The admin
+
+Sales by day or hour, profit from what the items cost, and the tills' cash
+counts.
+
+![The admin's Sales page](docs/screenshots/admin-sales.png)
+
+The menu, in English and Arabic, laid out as the till shows it.
+
+![The admin's Menu page](docs/screenshots/admin-menu.png)
+
+Purchases from invoices, set against sales.
+
+![The admin's Purchases page](docs/screenshots/admin-purchases.png)
+
+The shop's details, as receipts print them.
+
+![The admin's Shop page](docs/screenshots/admin-shop.png)
+
+The screenshots are of a demo with made-up data (`go run . demo` in
+`apps/server`).
+
 - [PLAN.md](PLAN.md): the plan, decisions and phases.
 - [docs/design.md](docs/design.md): the POS's visual design.
 - [docs/phase0.md](docs/phase0.md): the checks to run on the POS PC.
