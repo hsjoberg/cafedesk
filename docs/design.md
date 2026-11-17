@@ -337,8 +337,10 @@ each item and into the big cook, then looking at what each item makes.
 **Layout.** The wall reads like the menu board with a cost line under each
 price: items by category, each row its name, its price, what it costs and
 what it makes, and where the cost comes from (a recipe, typed, or none yet).
-The chef's **batches** come first, as the kitchen starts there: each with its
-cost per portion and how many portions a batch makes. **Options** come last.
+**Batches** follow, marked optional, as many shops make everything to order:
+each with its cost per portion, how many portions a batch makes, and the
+items that use it. **Options** come last. The wording is for any small shop:
+no chef or curry assumed, examples from several kinds of kitchen.
 The editor is the recipe card: lines of an ingredient or batch, an amount in
 its unit, and that line's cost at today's prices; under them, what the item
 costs and makes, as you type.

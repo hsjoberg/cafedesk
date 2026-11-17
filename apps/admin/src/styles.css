@@ -1188,6 +1188,9 @@ fieldset.bare {
   text-align: left;
   cursor: pointer;
 }
+.none-yet {
+  margin: 0;
+}
 .batch .used-in {
   color: var(--ink);
 }

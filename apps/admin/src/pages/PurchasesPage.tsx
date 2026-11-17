@@ -308,7 +308,7 @@ export function PurchasesPage() {
       for (const [i, l] of kept.entries()) {
         if (!isNew(l) || l.sortTo !== NEW) continue;
         const name = l.newName.trim();
-        if (!name) throw { field: `lines.${i}.newName`, message: "Name the new ingredient, as Basmati rice." };
+        if (!name) throw { field: `lines.${i}.newName`, message: "Name the new ingredient, as Rice or Milk." };
         const key = name.toLowerCase();
         if (made.has(key)) continue;
         const known = ingredients().find((x) => x.name.toLowerCase() === key);

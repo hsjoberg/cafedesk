@@ -114,10 +114,14 @@ The `demo` command sorts its products, leaving dish soap and lemons unsorted.
   ("Evaporated milk, 30 g"), or portions of a batch ("Chicken curry base, 1
   portion"). The editor gives each line's cost at today's prices, and what
   the item costs and makes on each sale, as you type.
-- A **batch** is the chef's big cook: what goes in the pot, and how many
-  portions it makes. A portion costs the pot's cost over its portions. A meal
-  uses 1 portion, or 1.5 for a big plate. A batch is made of ingredients, not
-  of other batches.
+- A **batch** is optional: for something made in bulk, such as the chef's big
+  cook, a tray of dough or a jug of syrup. It says what goes into one batch,
+  and how many portions it makes; a portion costs the batch's cost over its
+  portions. An item uses 1 portion, or 1.5 for a big plate. A batch is made of
+  ingredients, not of other batches. What is made to order needs no batch:
+  its recipe lists the ingredients for one, as served. The page puts the menu
+  first and batches after it, marked optional, so a shop that cooks to order
+  never needs them.
 - An **option's recipe** changes its item's: "Extra sugar" +5 g of sugar,
   "No sugar" -10 g, "Extra rice" half a portion of the rice pot. It may cost
   less than nothing.

@@ -177,7 +177,7 @@ export function OptionsPage() {
           <div class="field">
             <span>Options</span>
             <span class="meta">
-              Cost is what an option adds to the item's cost, as an extra parotta does. Leave it empty when it adds nothing.
+              Cost is what an option adds to the item's cost, as an extra shot or extra cheese does. Leave it empty when it adds nothing.
             </span>
             <Index each={g.modifiers}>
               {(m, i) => (

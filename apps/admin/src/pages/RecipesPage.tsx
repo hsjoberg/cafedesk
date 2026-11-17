@@ -218,42 +218,13 @@ export function RecipesPage() {
           <h1>Recipes</h1>
         </div>
         <p class="muted lede">
-          What goes into each item, from ingredients and the chef's batches. An item with a recipe gets its cost from it,
-          at today's prices, and follows them as purchases come in. Past sales keep the cost they had.
+          What goes into each item: ingredients, and portions of a batch if you make some things in bulk. An item with a
+          recipe gets its cost from it, at today's prices, and follows them as purchases come in. Past sales keep the cost
+          they had.
         </p>
         <Show when={loadError() || catalogError()}>
           <p class="banner" role="alert">{loadError() || catalogError()}</p>
         </Show>
-
-        <section class="panel">
-          <div class="panel-head">
-            <h2>Batches</h2>
-            <span class="spacer" />
-            <button type="button" class="btn btn-option btn-small" onClick={() => open({ kind: "batch", id: null })}>
-              Add a batch
-            </button>
-          </div>
-          <p class="meta">The chef's big cook: what goes in the pot, and how many portions it makes. Meals use portions of it.</p>
-          <Show when={batches().length} fallback={<p class="empty">No batches yet. Add one for each pot the chef makes.</p>}>
-            <div class="batch-list">
-              <For each={batches()}>
-                {(b) => (
-                  <button type="button" class="batch" aria-pressed={isEditing("batch", b.id)}
-                    onClick={() => open({ kind: "batch", id: b.id })}>
-                    <strong>{b.name}</strong>
-                    <span class="price">
-                      {b.portionCostFils != null ? `${formatFils(Math.round(b.portionCostFils))} a portion` : "No price yet"}
-                    </span>
-                    <span class="meta">Makes {grouped.format(b.yieldPortions)} portions.</span>
-                    <span class="meta used-in">
-                      {usersOf(b.id).length ? `Used in ${usersOf(b.id).map((u) => u.name).join(", ")}.` : "No meal uses it yet."}
-                    </span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
-        </section>
 
         <For each={categories()}>
           {(c) => (
@@ -296,6 +267,41 @@ export function RecipesPage() {
             </section>
           )}
         </For>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Batches</h2>
+            <span class="meta">Optional</span>
+            <span class="spacer" />
+            <button type="button" class="btn btn-option btn-small" onClick={() => open({ kind: "batch", id: null })}>
+              Add a batch
+            </button>
+          </div>
+          <p class="meta">
+            Only for something made in bulk, such as a pot of curry, a tray of dough or a jug of syrup: what goes into it,
+            and how many portions it makes. Items then use portions of it. Anything made to order needs none: give the item
+            its ingredients directly.
+          </p>
+          <Show when={batches().length} fallback={<p class="meta none-yet">No batches. Add one if you make something in bulk.</p>}>
+            <div class="batch-list">
+              <For each={batches()}>
+                {(b) => (
+                  <button type="button" class="batch" aria-pressed={isEditing("batch", b.id)}
+                    onClick={() => open({ kind: "batch", id: b.id })}>
+                    <strong>{b.name}</strong>
+                    <span class="price">
+                      {b.portionCostFils != null ? `${formatFils(Math.round(b.portionCostFils))} a portion` : "No price yet"}
+                    </span>
+                    <span class="meta">Makes {grouped.format(b.yieldPortions)} portions.</span>
+                    <span class="meta used-in">
+                      {usersOf(b.id).length ? `Used in ${usersOf(b.id).map((u) => u.name).join(", ")}.` : "No item uses it yet."}
+                    </span>
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
+        </section>
 
         <section class="panel">
           <h2>Options</h2>
@@ -356,16 +362,16 @@ export function RecipesPage() {
             )}
           </Show>
           <Show when={editing()?.kind === "batch"}>
-            <Field label="Name" value={bd.name} placeholder="Chicken curry base" onInput={(v) => setBd("name", v)}
+            <Field label="Name" value={bd.name} placeholder="Tomato sauce" onInput={(v) => setBd("name", v)}
               error={fieldError(error(), "name")} />
             <Field label="Portions one batch makes" value={bd.portions} inputMode="decimal" placeholder="40"
               onInput={(v) => setBd("portions", v)} error={fieldError(error(), "yieldPortions")}
-              hint="As the chef serves it: plates of curry, or of rice." />
+              hint="As it is served: plates, bowls, cups or pieces." />
             <Show when={editing()?.id}>
               <div class="field">
-                <span>Meals that use it</span>
+                <span>Items that use it</span>
                 <Show when={usersOf(editing()!.id!).length} fallback={
-                  <span class="meta">None yet. Add it to a meal's recipe as a line: "Chicken curry base, 1 portion".</span>
+                  <span class="meta">None yet. Add it to an item's recipe as a line, as "Tomato sauce, 1 portion".</span>
                 }>
                   <div class="used-by">
                     <For each={usersOf(editing()!.id!)}>
@@ -382,7 +388,12 @@ export function RecipesPage() {
           </Show>
 
           <div class="field">
-            <span>{editing()?.kind === "batch" ? "What goes in the pot" : "What goes into it"}</span>
+            <span>{editing()?.kind === "batch" ? "What goes into one batch" : "What goes into it"}</span>
+            <Show when={editing()?.kind === "item"}>
+              <span class="meta">
+                The ingredients for one, as served. If part of it is made in bulk, add a portion of that batch instead.
+              </span>
+            </Show>
             <Index each={lines.list}>
               {(l, i) => (
                 <div class="recipe-line">
@@ -423,7 +434,7 @@ export function RecipesPage() {
                     {(b) => (
                       <p class="batch-note">
                         From the batch: {formatFils(Math.round(b().portionCostFils ?? 0))} a portion, {grouped.format(b().yieldPortions)} to a
-                        pot.{" "}
+                        batch.{" "}
                         <button type="button" class="link-row" onClick={() => open({ kind: "batch", id: b().id })}>
                           Open the batch
                         </button>
