@@ -101,6 +101,24 @@ use.
   purchases, and those recipes don't use, such as dish soap, which can stay.
 - Sorting a new product into a new ingredient is one save: the product's
   editor offers "A new ingredient".
+- **Sold as it is**, the other choice there, is for what is sold unchanged,
+  as a can or a bottle: pick the menu item, and saving makes an ingredient
+  named after it, counted in pieces, and gives the item the recipe of one of
+  it (an item with a recipe keeps its own). The purchase form offers it too.
+- **Units.** A purchase line can say the unit its quantity counts in, as the
+  invoice's UOM column does: EA, CAR, PAC, BAG. It is optional. A product
+  learns what one of each unit holds: the first as it is sorted, and a new
+  one the first time a line counts in it, asked once ("One CAR holds") with
+  a suggestion from the name. So "Mozzarella 6x2kg" bought by the EA is a
+  2 kg bag and by the CAR 12 kg, each line typed as the invoice prints it.
+  Costs and Bought against used count every line by its own unit's size; a
+  line in a unit the product doesn't know isn't counted. A pack size given
+  without a unit goes for any line, until a line with a unit confirms it.
+- The suggestions read the name and the unit: a carton (CAR, CTN, BOX) or no
+  unit is the whole size, another unit one of what the carton holds; "25g
+  4x1.25kg" is 200 pieces of 25 g; cans and bottles, and names like
+  "5x25x40gm", suggest pieces. Every suggestion shows the price per kg, litre
+  or piece it comes to, so a wrong one stands out.
 - An ingredient's unit can't change while its products have pack sizes in it.
   Deleting an ingredient leaves its products, unsorted.
 
@@ -199,7 +217,10 @@ Recipes: `GET /v1/admin/recipes`, `PUT /v1/admin/items/{id}/recipe`,
 
 Ingredients: `GET/POST /v1/admin/ingredients`, `PUT/DELETE
 /v1/admin/ingredients/{id}`, and `PUT /v1/admin/products/{id}` for a product's
-name, area, ingredient and pack size. `unitCostFils` is fils
+name, area, ingredient and pack size, `packUom` the unit it is for, and
+`packs` the other units'. Purchase lines take an optional `uom`; with a
+`packAmount`, a sorted product learns that unit's size (migration 0005:
+`purchase_lines.uom`, `products.pack_uom`, `product_packs`). `unitCostFils` is fils
 per gram, millilitre or piece.
 
 `costFils` on `ItemInput`/`Item` and `ModifierInput`/`Modifier`: required, and

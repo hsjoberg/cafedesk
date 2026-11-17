@@ -25,7 +25,7 @@ export function Tile(props: {
       <span class="body">
         <span class="name">{props.name || "New item"}</span>
         <Show when={props.nameAr}>
-          <span class="name-ar" lang="ar">
+          <span class="name-ar" lang="ar" dir="rtl">
             {props.nameAr}
           </span>
         </Show>

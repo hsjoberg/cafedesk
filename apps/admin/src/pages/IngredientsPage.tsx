@@ -4,8 +4,9 @@ import { createStore } from "solid-js/store";
 import { api, call, type Area, type Ingredient, type Product, type Unit } from "../api/client";
 import { areaLabel, areas, unitOf, units } from "../areas";
 import { shortDate } from "../dates";
-import { parsePack } from "../guess";
+import { guessIngredientName, packFor, parsePack, suggestUnit } from "../guess";
 import { formatAmount } from "../money";
+import { catalog, reloadCatalog } from "../state";
 import { DeleteButton, EditorHead, Field, fieldError, FormError, toSaveError, type SaveError } from "../ui";
 
 const grouped = new Intl.NumberFormat("en", { maximumFractionDigits: 3 });
@@ -29,10 +30,19 @@ type ProductDraft = {
   area: Area;
   ingredientId: string;
   pack: string;
+  /** The invoice's unit the pack is for, as EA or CAR; empty for any. */
+  packUom: string;
+  /** The other units it comes in, and what one of each holds. */
+  packs: { uom: string; pack: string }[];
   newName: string;
   newUnit: Unit;
+  /** With ingredientId SOLD: the menu item it is sold as. */
+  soldAs: string;
 };
 const NEW = "new";
+/** Sold as it is: the product is a menu item, one to one, such as a can. */
+const SOLD = "sold";
+const normalUom = (u: string) => u.trim().toUpperCase();
 
 /** Ingredients: what recipes use, and the products that are each. */
 export function IngredientsPage() {
@@ -55,7 +65,12 @@ export function IngredientsPage() {
   const ingredientOf = (id?: string) => ingredients()?.find((i) => i.id === id);
 
   const [editing, setEditing] = createSignal<Editing>();
-  const [pd, setPd] = createStore<ProductDraft>({ name: "", code: "", area: "counter", ingredientId: "", pack: "", newName: "", newUnit: "g" });
+  const [pd, setPd] = createStore<ProductDraft>({ name: "", code: "", area: "counter", ingredientId: "", pack: "", packUom: "",
+    packs: [], newName: "", newUnit: "g", soldAs: "" });
+  const menuItems = () => catalog()?.items ?? [];
+  onMount(() => {
+    if (!catalog()) void reloadCatalog();
+  });
   const [id, setId] = createStore<{ name: string; unit: Unit }>({ name: "", unit: "g" });
   const [error, setError] = createSignal<SaveError>();
   const [status, setStatus] = createSignal("");
@@ -65,7 +80,8 @@ export function IngredientsPage() {
     setError(undefined);
     setStatus("");
     setPd({ name: p.name, code: p.code ?? "", area: p.area, ingredientId: p.ingredientId ?? "", pack: p.packAmount ? String(p.packAmount) : "",
-      newName: "", newUnit: "g" });
+      packUom: p.packAmount ? p.packUom : p.lastUom ?? "", packs: p.packs.map((x) => ({ uom: x.uom, pack: String(x.packAmount) })),
+      newName: guessIngredientName(p.name), newUnit: suggestUnit(p.name), soldAs: "" });
     setEditing({ kind: "product", id: p.id });
   };
   const openIngredient = (x: Ingredient | null) => {
@@ -85,7 +101,16 @@ export function IngredientsPage() {
 
   // The product's unit: its ingredient's, or the new one's.
   const draftUnit = (): Unit | undefined =>
-    pd.ingredientId === NEW ? pd.newUnit : ingredientOf(pd.ingredientId)?.unit;
+    pd.ingredientId === NEW ? pd.newUnit : pd.ingredientId === SOLD ? "piece" : ingredientOf(pd.ingredientId)?.unit;
+  /** What the name suggests one holds, for a product not yet given a size. */
+  const suggestPack = () => {
+    if (product()?.packAmount) return;
+    setPd("pack", String(packFor(pd.name, draftUnit(), pd.packUom) ?? ""));
+  };
+  const setSortTo = (to: string) => {
+    setPd("ingredientId", to);
+    suggestPack();
+  };
   const packHint = () => {
     const unit = draftUnit();
     if (!unit) return "";
@@ -94,7 +119,10 @@ export function IngredientsPage() {
     if (n === null) return "Type a number, or one like 48 x 170.";
     const p = product();
     let hint = `= ${amountOf(n, unit)}`;
-    if (p?.lastCostEachFils) hint += `. At what one cost last, ${formatAmount(Math.round(p.lastCostEachFils))}, that's ${perUnit(p.lastCostEachFils / n, unit)}.`;
+    // The last purchase's price says something only if it was in this unit.
+    const sameUnit = !normalUom(pd.packUom) || normalUom(pd.packUom) === (p?.lastUom ?? normalUom(pd.packUom));
+    if (p?.lastCostEachFils && sameUnit)
+      hint += `. At what one cost last, ${formatAmount(Math.round(p.lastCostEachFils))}, that's ${perUnit(p.lastCostEachFils / n, unit)}.`;
     return hint;
   };
 
@@ -118,18 +146,35 @@ export function IngredientsPage() {
       let ingredientId: string | null = pd.ingredientId || null;
       const pack = pd.pack.trim() ? parsePack(pd.pack) : null;
       if (pd.pack.trim() && pack === null) throw { field: "packAmount", message: "Type a number, or one like 48 x 170." };
-      if (ingredientId === NEW) {
-        const made = await call(api.POST("/v1/admin/ingredients", { body: { name: pd.newName, unit: pd.newUnit } }))
+      const packs = pd.packs.filter((x) => x.uom.trim() || x.pack.trim()).map((x, i) => {
+        const n = parsePack(x.pack);
+        if (!x.uom.trim()) throw { field: `packs.${i}.uom`, message: "Name the unit, as CAR." };
+        if (n === null) throw { field: `packs.${i}.packAmount`, message: "Type how much one holds, as 12000 or 6 x 2000." };
+        return { uom: normalUom(x.uom), packAmount: n };
+      });
+      const item = pd.ingredientId === SOLD ? menuItems().find((it) => it.id === pd.soldAs) : undefined;
+      if (pd.ingredientId === SOLD && !item) throw { field: "soldAs", message: "Choose the menu item it is sold as." };
+      if (ingredientId === NEW || item) {
+        const name = item ? item.name : pd.newName;
+        const known = item && ingredients()?.find((x) => x.name.toLowerCase() === name.trim().toLowerCase());
+        const made = known ?? await call(api.POST("/v1/admin/ingredients", { body: { name, unit: item ? "piece" : pd.newUnit } }))
           .catch((e) => {
-            throw { field: "newName", message: (e as Error).message };
+            throw { field: item ? "soldAs" : "newName", message: (e as Error).message };
           });
         ingredientId = made.id;
-        setPd({ ingredientId: made.id, newName: "" });
+        setPd({ ingredientId: made.id, newName: "", soldAs: "" });
       }
       await call(api.PUT("/v1/admin/products/{id}", {
         params: { path: { id: p.id } },
-        body: { name: pd.name, code: pd.code, area: pd.area, ingredientId, packAmount: ingredientId ? pack : null },
+        body: { name: pd.name, code: pd.code, area: pd.area, ingredientId, packAmount: ingredientId ? pack : null,
+          packUom: normalUom(pd.packUom), packs },
       }));
+      // Sold as it is: the item's recipe is one of it, unless it has one.
+      if (item && ingredientId && !item.costFromRecipe) {
+        await call(api.PUT("/v1/admin/items/{id}/recipe", { params: { path: { id: item.id } },
+          body: { lines: [{ ingredientId, amount: 1 }] } }));
+        void reloadCatalog();
+      }
     }, "Saved.");
   const saveIngredient = () =>
     run(async () => {
@@ -148,23 +193,36 @@ export function IngredientsPage() {
       setEditing(undefined);
     }, "");
 
-  const ProductRow = (props: { p: Product }) => (
-    <button type="button" class="product-row" aria-pressed={editing()?.kind === "product" && editing()?.id === props.p.id}
-      onClick={() => openProduct(props.p)}>
-      <span>{props.p.name}</span>
-      <span class="meta">
-        <Show when={props.p.packAmount && ingredientOf(props.p.ingredientId)} fallback={areaLabel(props.p.area)}>
-          {amountOf(props.p.packAmount!, ingredientOf(props.p.ingredientId)!.unit)}
-        </Show>
-        <Show when={props.p.lastCostEachFils != null}>
-          {" "}at {formatAmount(Math.round(props.p.lastCostEachFils!))}
-          <Show when={props.p.packAmount && ingredientOf(props.p.ingredientId)}>
-            , {perUnit(props.p.lastCostEachFils! / props.p.packAmount!, ingredientOf(props.p.ingredientId)!.unit)}
+  /**
+   * How much one of the product's latest unit holds, so its latest price
+   * reads per kg: its pack for that unit, else its main one where it goes.
+   */
+  const lastPack = (p: Product): number | null => {
+    const u = p.lastUom ?? "";
+    const own = u ? p.packs.find((x) => x.uom === u) : undefined;
+    if (own) return own.packAmount;
+    return p.packAmount != null && (!u || !p.packUom || p.packUom === u) ? p.packAmount : null;
+  };
+  const ProductRow = (props: { p: Product }) => {
+    const unit = () => ingredientOf(props.p.ingredientId)?.unit;
+    const pack = () => (unit() ? lastPack(props.p) : null);
+    return (
+      <button type="button" class="product-row" aria-pressed={editing()?.kind === "product" && editing()?.id === props.p.id}
+        onClick={() => openProduct(props.p)}>
+        <span>{props.p.name}</span>
+        <span class="meta">
+          <Show when={pack()} fallback={areaLabel(props.p.area)}>
+            {amountOf(pack()!, unit()!)}
+            <Show when={props.p.lastUom}> a {props.p.lastUom}</Show>
           </Show>
-        </Show>
-      </span>
-    </button>
-  );
+          <Show when={props.p.lastCostEachFils != null}>
+            {" "}at {formatAmount(Math.round(props.p.lastCostEachFils!))}
+            <Show when={pack()}>, {perUnit(props.p.lastCostEachFils! / pack()!, unit()!)}</Show>
+          </Show>
+        </span>
+      </button>
+    );
+  };
 
   return (
     <div class="workspace ingredients">
@@ -274,7 +332,8 @@ export function IngredientsPage() {
             </>
           }>
             <EditorHead title="Product" onClose={() => setEditing(undefined)} />
-            <FormError error={error()} fields={["name", "area", "packAmount", "newName"]} />
+            <FormError error={error()} fields={["name", "area", "packAmount", "newName", "packUom", "soldAs",
+              ...pd.packs.flatMap((_, i) => [`packs.${i}.uom`, `packs.${i}.packAmount`])]} />
             <Field label="Supplier's item code (optional)" value={pd.code} onInput={(v) => setPd("code", v)}
               error={fieldError(error(), "code")} hint="As on its invoices. A code typed on a purchase finds the product." />
             <Field label="Name, as invoices have it" value={pd.name} onInput={(v) => setPd("name", v)}
@@ -287,27 +346,94 @@ export function IngredientsPage() {
             </label>
             <label class="field">
               <span>The ingredient it is</span>
-              <select class="input" value={pd.ingredientId} onChange={(e) => setPd("ingredientId", e.currentTarget.value)}>
+              <select class="input" value={pd.ingredientId} onChange={(e) => setSortTo(e.currentTarget.value)}>
                 <option value="">None: recipes don't use it</option>
                 <For each={ingredients()}>{(x) => <option value={x.id} selected={pd.ingredientId === x.id}>{x.name}</option>}</For>
                 <option value={NEW} selected={pd.ingredientId === NEW}>A new ingredient…</option>
+                <option value={SOLD} selected={pd.ingredientId === SOLD}>Sold as it is: a menu item…</option>
               </select>
             </label>
+            <Show when={pd.ingredientId === SOLD}>
+              <label class="field">
+                <span>The menu item</span>
+                <select class="input" value={pd.soldAs} onChange={(e) => setPd("soldAs", e.currentTarget.value)}
+                  aria-invalid={fieldError(error(), "soldAs") ? "true" : undefined}>
+                  <option value="" selected={!pd.soldAs}>Choose…</option>
+                  <For each={menuItems()}>{(it) => <option value={it.id} selected={pd.soldAs === it.id}>{it.name}</option>}</For>
+                </select>
+                <Show when={fieldError(error(), "soldAs")} fallback={
+                  <span class="meta">
+                    {menuItems().find((it) => it.id === pd.soldAs)?.costFromRecipe
+                      ? "It has a recipe already, which stays. The new ingredient is named after it."
+                      : "Saving makes an ingredient named after it, counted in pieces, and its recipe one of it."}
+                  </span>
+                }>
+                  <span class="error">{fieldError(error(), "soldAs")}</span>
+                </Show>
+              </label>
+            </Show>
             <Show when={pd.ingredientId === NEW}>
               <div class="mod">
                 <Field label="New ingredient's name" value={pd.newName} placeholder="Evaporated milk"
                   onInput={(v) => setPd("newName", v)} error={fieldError(error(), "newName")} />
                 <label class="field">
                   <span>Measured in</span>
-                  <select class="input" value={pd.newUnit} onChange={(e) => setPd("newUnit", e.currentTarget.value as Unit)}>
+                  <select class="input" value={pd.newUnit} onChange={(e) => {
+                    setPd("newUnit", e.currentTarget.value as Unit);
+                    suggestPack();
+                  }}>
                     <For each={units}>{(u) => <option value={u.id} selected={pd.newUnit === u.id}>{u.label}</option>}</For>
                   </select>
                 </label>
               </div>
             </Show>
             <Show when={draftUnit()}>
-              <Field label={`One holds (${unitOf(draftUnit()!).short})`} value={pd.pack} inputMode="decimal"
+              <label class="field">
+                <span>Unit on its invoices (optional)</span>
+                <input class="input" list="uoms" placeholder="EA, CAR, PAC…" value={pd.packUom}
+                  onInput={(e) => {
+                    setPd("packUom", e.currentTarget.value);
+                    suggestPack();
+                  }}
+                  aria-invalid={fieldError(error(), "packUom") ? "true" : undefined} />
+                <span class="meta">As the invoice's UOM column says. The size below is for one of it.</span>
+              </label>
+              <datalist id="uoms">
+                <For each={["EA", "CAR", "PAC", "BAG", "BOX", "CTN", "PCS", "KG", "BTL"]}>{(u) => <option value={u} />}</For>
+              </datalist>
+              <Field label={`${pd.packUom.trim() ? `One ${normalUom(pd.packUom)} holds` : "One holds"} (${unitOf(draftUnit()!).short})`}
+                value={pd.pack} inputMode="decimal"
                 onInput={(v) => setPd("pack", v)} error={fieldError(error(), "packAmount")} hint={packHint()} />
+              <Show when={pd.packs.length}>
+                <span class="meta">Other units it comes in</span>
+              </Show>
+              <For each={pd.packs}>
+                {(x, i) => (
+                  <div class="mod-row">
+                    <label class="field">
+                      <span class="visually-hidden">Unit</span>
+                      <input class="input" list="uoms" placeholder="CAR" value={x.uom}
+                        onInput={(e) => setPd("packs", i(), "uom", e.currentTarget.value)}
+                        aria-invalid={fieldError(error(), `packs.${i()}.uom`) ? "true" : undefined} />
+                    </label>
+                    <label class="field">
+                      <span class="visually-hidden">One holds</span>
+                      <input class="input" inputmode="decimal" placeholder={`One holds (${unitOf(draftUnit()!).short})`} value={x.pack}
+                        onInput={(e) => setPd("packs", i(), "pack", e.currentTarget.value)}
+                        aria-invalid={fieldError(error(), `packs.${i()}.packAmount`) ? "true" : undefined} />
+                    </label>
+                    <button type="button" class="btn btn-danger btn-small"
+                      onClick={() => setPd("packs", (ps) => ps.filter((_, j) => j !== i()))}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </For>
+              <Show when={pd.pack.trim()}>
+                <button type="button" class="btn btn-option" onClick={() => setPd("packs", (ps) => [...ps, { uom: "", pack: "" }])}>
+                  Add another unit
+                </button>
+              </Show>
             </Show>
             <Show when={product()?.lastPurchasedOn}>
               <p class="meta">

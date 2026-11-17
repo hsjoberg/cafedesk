@@ -429,6 +429,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/reports/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The orders of business dates, newest first, each with its lines,
+         *     whether it was voided and what was refunded of it: to look one up,
+         *     or tell test orders from real ones. At most 31 days, and 2,000 orders.
+         */
+        get: operations["getOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/reports/usage": {
         parameters: {
             query?: never;
@@ -1281,6 +1302,24 @@ export interface components {
              * @description How much of its ingredient one holds, in the ingredient's unit, e.g. 8160 (g).
              */
             packAmount?: number;
+            /**
+             * @description The unit packAmount is for, as invoices print it (EA, CAR...);
+             *     empty when it was given without one, and goes for any line.
+             */
+            packUom: string;
+            /** @description How much one of each other unit it comes in holds. */
+            packs: components["schemas"]["ProductPack"][];
+            /** @description The unit of its latest purchase line, if it gave one. */
+            lastUom?: string;
+        };
+        ProductPack: {
+            /** @description As invoices print it, e.g. CAR. */
+            uom: string;
+            /**
+             * Format: double
+             * @description In the ingredient's unit.
+             */
+            packAmount: number;
         };
         ProductInput: {
             name: string;
@@ -1294,6 +1333,10 @@ export interface components {
              * @description Up to 3 decimals; null when not known, or with no ingredient.
              */
             packAmount: number | null;
+            /** @description The unit packAmount is for; empty for any. */
+            packUom?: string;
+            /** @description The other units and what one of each holds; left out to keep them. */
+            packs?: components["schemas"]["ProductPack"][];
         };
         /** @enum {string} */
         Unit: "g" | "ml" | "piece";
@@ -1344,9 +1387,13 @@ export interface components {
             ingredientId?: string;
             /**
              * Format: double
-             * @description How much of the ingredient one holds, in its unit.
+             * @description How much of the ingredient one holds, in its unit: one of uom if
+             *     given. For a new product with ingredientId; or for a sorted
+             *     product that doesn't know uom yet, which learns it.
              */
             packAmount?: number;
+            /** @description The unit quantity counts in, as the invoice prints it (EA, CAR, PAC...). Optional. */
+            uom?: string;
             area: components["schemas"]["Area"];
             /**
              * Format: double
@@ -1362,6 +1409,8 @@ export interface components {
             totalFils: number;
         };
         PurchaseLine: {
+            /** @description The unit quantity counts in; empty if the line didn't say. */
+            uom: string;
             productCode?: string;
             /** Format: int64 */
             vatFils: number;
@@ -1726,6 +1775,43 @@ export interface components {
             /** Format: int64 */
             changeFils: number;
             lines: components["schemas"]["OrderLineEvent"][];
+        };
+        OrderList: {
+            orders: components["schemas"]["OrderRow"][];
+            /** @description There were more orders than the list holds. */
+            more: boolean;
+        };
+        OrderRow: {
+            /** Format: uuid */
+            id: string;
+            /** @description As the till printed it, e.g. T1-012. */
+            code: string;
+            /** Format: date-time */
+            createdAt: string;
+            date: components["schemas"]["LocalDate"];
+            tillCode: string;
+            staffName: string;
+            paymentMethod: components["schemas"]["PaymentMethod"];
+            /** Format: int64 */
+            totalFils: number;
+            /** @enum {string} */
+            status: "completed" | "voided";
+            voidReason?: string;
+            voidedByName?: string;
+            /**
+             * Format: int64
+             * @description What was refunded of it, 0 for nothing.
+             */
+            refundedFils: number;
+            lines: components["schemas"]["OrderRowLine"][];
+        };
+        OrderRowLine: {
+            name: string;
+            qty: number;
+            /** Format: int64 */
+            lineTotalFils: number;
+            /** @description The options chosen that weren't the item's defaults. */
+            options: string[];
         };
         /** @enum {string} */
         PaymentMethod: "cash" | "card";
@@ -2534,6 +2620,32 @@ export interface operations {
             };
             400: components["responses"]["Error"];
             404: components["responses"]["Error"];
+        };
+    };
+    getOrders: {
+        parameters: {
+            query: {
+                from: components["schemas"]["LocalDate"];
+                to: components["schemas"]["LocalDate"];
+                /** @description One shop. Without it, every shop of the organization. */
+                shopId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The orders. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderList"];
+                };
+            };
+            400: components["responses"]["Error"];
         };
     };
     getUsage: {

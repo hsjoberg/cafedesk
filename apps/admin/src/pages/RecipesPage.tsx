@@ -231,6 +231,13 @@ export function RecipesPage() {
             <section class="panel">
               <h2>{c.name}</h2>
               <div class="table-wrap"><table class="table recipe-table">
+                <colgroup>
+                  <col />
+                  <col class="c-num" />
+                  <col class="c-num" />
+                  <col class="c-margin" />
+                  <col class="c-from" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th scope="col">Item</th>
@@ -307,11 +314,19 @@ export function RecipesPage() {
           <h2>Options</h2>
           <p class="meta">How an option changes its item: extra sugar adds some, no sugar takes it away.</p>
           <div class="table-wrap"><table class="table recipe-table">
+            <colgroup>
+              <col />
+              <col class="c-num" />
+              <col class="c-num" />
+              <col class="c-margin" />
+              <col class="c-from" />
+            </colgroup>
             <thead>
               <tr>
                 <th scope="col">Option</th>
                 <th scope="col" class="n">Price change</th>
                 <th scope="col" class="n">Cost</th>
+                <td />
                 <th scope="col">From</th>
               </tr>
             </thead>
@@ -330,6 +345,7 @@ export function RecipesPage() {
                         </th>
                         <td class="n">{m.priceDeltaFils ? formatFils(m.priceDeltaFils) : ""}</td>
                         <td class="n">{costCell(m.costFils, m.costFromRecipe)}</td>
+                        <td />
                         <td class="from">
                           {m.costFromRecipe ? "Recipe" : m.costFils != null ? "Typed" : <span class="muted">None</span>}
                         </td>

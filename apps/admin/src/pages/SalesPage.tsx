@@ -2,6 +2,7 @@ import { A, useSearchParams } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, on, onMount, Show } from "solid-js";
 import { api, call, type CashMovement, type DayClose, type SalesReport, type Terminal } from "../api/client";
 import { ColumnChart, type Column } from "../components/ColumnChart";
+import { OrdersPanel } from "../components/OrdersPanel";
 import { OverdueInvoices } from "../components/Overdue";
 import { VatNotice } from "../components/VatNotice";
 import { daysBetween, isDate, longDate, presets, rangeLabel, shortDate, todayIn } from "../dates";
@@ -408,6 +409,10 @@ export function SalesPage() {
                     </table>
                   </section>
                 </div>
+              </Show>
+              <Show when={daysBetween(from(), to()) <= 31}>
+                <OrdersPanel from={from()} to={to()} shopId={shop() ? params.shop : undefined} timeZone={timeZone()}
+                  oneDay={oneDay()} />
               </Show>
             </div>
           )}

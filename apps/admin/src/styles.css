@@ -959,8 +959,16 @@ fieldset.bare {
 }
 .line-figures {
   display: grid;
-  grid-template-columns: 0.8fr 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: minmax(3rem, 0.7fr) minmax(3.75rem, 0.75fr) 1fr 1fr;
+  gap: 6px;
+}
+.line-figures .uom .input {
+  text-align: left;
+  text-transform: uppercase;
+  padding-inline: 6px;
+}
+.line-check {
+  display: block;
 }
 .line-figures .field > span:first-child {
   font-size: 13px;
@@ -1178,8 +1186,44 @@ fieldset.bare {
   font-size: var(--fs-price);
   font-weight: 500;
 }
+/* Every recipe table has the same columns, so the figures line up from one
+   category to the next down the page. */
+.recipe-table {
+  table-layout: fixed;
+  min-width: 30rem;
+}
+.recipe-table .c-num {
+  width: 7rem;
+}
+.recipe-table .c-margin {
+  width: 5.5rem;
+}
+.recipe-table .c-from {
+  width: 6.5rem;
+}
+.recipe-table tbody th {
+  white-space: normal;
+}
+.recipe-table th:nth-child(5),
+.recipe-table td:nth-child(5) {
+  padding-left: 18px;
+}
 .recipe-table tbody tr {
   cursor: pointer;
+}
+/* Orders, one by one: voided ones step back. */
+.order-table .what {
+  white-space: normal;
+  min-width: 14rem;
+}
+.order-table .status {
+  display: block;
+}
+.order-table tr.voided > * {
+  color: var(--ink-muted);
+}
+.order-table tr.voided .n {
+  text-decoration: line-through;
 }
 .recipe-table tbody tr:hover > *,
 .recipe-table tbody tr.on > * {

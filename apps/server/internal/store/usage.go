@@ -101,7 +101,7 @@ func (s *Store) Usage(ctx context.Context, orgID uuid.UUID, from, to time.Time, 
 
 		// Bought: sorted products with pack sizes, in the ingredient's unit.
 		bought := map[uuid.UUID]float64{}
-		rows, err = tx.Query(ctx, `SELECT p.ingredient_id, p.pack_milli, l.qty_milli, l.total_fils
+		rows, err = tx.Query(ctx, `SELECT p.ingredient_id, `+linePack+`, l.qty_milli, l.total_fils
 			FROM purchase_lines l JOIN purchases pu ON pu.id = l.purchase_id JOIN products p ON p.id = l.product_id
 			WHERE pu.org_id = $1 AND pu.date BETWEEN $2::date AND $3::date AND ($4::uuid IS NULL OR pu.shop_id = $4)
 				AND pu.deleted_at IS NULL`, args...)

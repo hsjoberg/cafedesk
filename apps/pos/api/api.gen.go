@@ -81,6 +81,24 @@ func (e EventType) Valid() bool {
 	}
 }
 
+// Defines values for OrderRowStatus.
+const (
+	Completed OrderRowStatus = "completed"
+	Voided    OrderRowStatus = "voided"
+)
+
+// Valid indicates whether the value is a known member of the OrderRowStatus enum.
+func (e OrderRowStatus) Valid() bool {
+	switch e {
+	case Completed:
+		return true
+	case Voided:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PaymentMethod.
 const (
 	Card PaymentMethod = "card"
@@ -704,6 +722,48 @@ type OrderLineModifierEvent struct {
 	PriceDeltaFils int64  `json:"priceDeltaFils"`
 }
 
+// OrderList defines model for OrderList.
+type OrderList struct {
+	// More There were more orders than the list holds.
+	More   bool       `json:"more"`
+	Orders []OrderRow `json:"orders"`
+}
+
+// OrderRow defines model for OrderRow.
+type OrderRow struct {
+	// Code As the till printed it, e.g. T1-012.
+	Code      string    `json:"code"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date          LocalDate          `json:"date"`
+	Id            openapi_types.UUID `json:"id"`
+	Lines         []OrderRowLine     `json:"lines"`
+	PaymentMethod PaymentMethod      `json:"paymentMethod"`
+
+	// RefundedFils What was refunded of it, 0 for nothing.
+	RefundedFils int64          `json:"refundedFils"`
+	StaffName    string         `json:"staffName"`
+	Status       OrderRowStatus `json:"status"`
+	TillCode     string         `json:"tillCode"`
+	TotalFils    int64          `json:"totalFils"`
+	VoidReason   *string        `json:"voidReason,omitempty"`
+	VoidedByName *string        `json:"voidedByName,omitempty"`
+}
+
+// OrderRowStatus defines model for OrderRow.Status.
+type OrderRowStatus string
+
+// OrderRowLine defines model for OrderRowLine.
+type OrderRowLine struct {
+	LineTotalFils int64  `json:"lineTotalFils"`
+	Name          string `json:"name"`
+
+	// Options The options chosen that weren't the item's defaults.
+	Options []string `json:"options"`
+	Qty     int      `json:"qty"`
+}
+
 // OrderVoidEvent defines model for OrderVoidEvent.
 type OrderVoidEvent struct {
 	OrderId      openapi_types.UUID `json:"orderId"`
@@ -798,11 +858,21 @@ type Product struct {
 	// LastUnitPriceFils The unit price of its latest purchase.
 	LastUnitPriceFils *int64 `json:"lastUnitPriceFils,omitempty"`
 
+	// LastUom The unit of its latest purchase line, if it gave one.
+	LastUom *string `json:"lastUom,omitempty"`
+
 	// Name As the invoice names it, e.g. "Rainbow evaporated milk, 48 x 170 g".
 	Name string `json:"name"`
 
 	// PackAmount How much of its ingredient one holds, in the ingredient's unit, e.g. 8160 (g).
 	PackAmount *float64 `json:"packAmount,omitempty"`
+
+	// PackUom The unit packAmount is for, as invoices print it (EA, CAR...);
+	// empty when it was given without one, and goes for any line.
+	PackUom string `json:"packUom"`
+
+	// Packs How much one of each other unit it comes in holds.
+	Packs []ProductPack `json:"packs"`
 }
 
 // ProductInput defines model for ProductInput.
@@ -818,6 +888,21 @@ type ProductInput struct {
 
 	// PackAmount Up to 3 decimals; null when not known, or with no ingredient.
 	PackAmount *float64 `json:"packAmount"`
+
+	// PackUom The unit packAmount is for; empty for any.
+	PackUom *string `json:"packUom,omitempty"`
+
+	// Packs The other units and what one of each holds; left out to keep them.
+	Packs *[]ProductPack `json:"packs,omitempty"`
+}
+
+// ProductPack defines model for ProductPack.
+type ProductPack struct {
+	// PackAmount In the ingredient's unit.
+	PackAmount float64 `json:"packAmount"`
+
+	// Uom As invoices print it, e.g. CAR.
+	Uom string `json:"uom"`
 }
 
 // Purchase defines model for Purchase.
@@ -871,7 +956,10 @@ type PurchaseLine struct {
 	Quantity      float64            `json:"quantity"`
 	TotalFils     int64              `json:"totalFils"`
 	UnitPriceFils int64              `json:"unitPriceFils"`
-	VatFils       int64              `json:"vatFils"`
+
+	// Uom The unit quantity counts in; empty if the line didn't say.
+	Uom     string `json:"uom"`
+	VatFils int64  `json:"vatFils"`
 }
 
 // PurchaseLineInput defines model for PurchaseLineInput.
@@ -884,7 +972,9 @@ type PurchaseLineInput struct {
 	// product belongs to no ingredient yet, as a new one doesn't.
 	IngredientId *openapi_types.UUID `json:"ingredientId,omitempty"`
 
-	// PackAmount How much of the ingredient one holds, in its unit.
+	// PackAmount How much of the ingredient one holds, in its unit: one of uom if
+	// given. For a new product with ingredientId; or for a sorted
+	// product that doesn't know uom yet, which learns it.
 	PackAmount *float64 `json:"packAmount,omitempty"`
 
 	// ProductCode The supplier's code for the product. A known code names its
@@ -903,6 +993,9 @@ type PurchaseLineInput struct {
 	// TotalFils The line's amount, as the invoice has it.
 	TotalFils     int64 `json:"totalFils"`
 	UnitPriceFils int64 `json:"unitPriceFils"`
+
+	// Uom The unit quantity counts in, as the invoice prints it (EA, CAR, PAC...). Optional.
+	Uom *string `json:"uom,omitempty"`
 
 	// VatFils The VAT in totalFils, when the prices were before VAT.
 	VatFils *int64 `json:"vatFils,omitempty"`
@@ -1369,6 +1462,15 @@ type ID = openapi_types.UUID
 
 // ListPurchasesParams defines parameters for ListPurchases.
 type ListPurchasesParams struct {
+	From LocalDate `form:"from" json:"from"`
+	To   LocalDate `form:"to" json:"to"`
+
+	// ShopId One shop. Without it, every shop of the organization.
+	ShopId *openapi_types.UUID `form:"shopId,omitempty" json:"shopId,omitempty"`
+}
+
+// GetOrdersParams defines parameters for GetOrders.
+type GetOrdersParams struct {
 	From LocalDate `form:"from" json:"from"`
 	To   LocalDate `form:"to" json:"to"`
 

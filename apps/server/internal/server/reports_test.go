@@ -86,6 +86,34 @@ func TestSalesReport(t *testing.T) {
 	if rep.Totals != want {
 		t.Errorf("totals %+v, want %+v", rep.Totals, want)
 	}
+
+	// The orders themselves, newest first: voids with their reasons, test
+	// orders among them, and what was refunded.
+	var ol api.OrderList
+	if code := c.do("GET", "/v1/admin/reports/orders?from=2026-11-14&to=2026-11-15", nil, &ol); code != 200 ||
+		len(ol.Orders) != 6 || ol.More {
+		t.Fatalf("orders: %d %+v", code, ol)
+	}
+	if first := ol.Orders[0]; first.Id != o4.Id || first.Date != "2026-11-15" || first.TillCode != "T1" ||
+		len(first.Lines) != 1 || first.Lines[0].Name != "Parotta" || first.Lines[0].Qty != 2 {
+		t.Errorf("newest first: %+v", first)
+	}
+	reasons := map[uuid.UUID]string{}
+	for _, o := range ol.Orders {
+		if o.Status == api.Voided {
+			reasons[o.Id] = *o.VoidReason
+		}
+		if o.Id == o1.Id && (o.RefundedFils != 100 || len(o.Lines) != 2 || o.StaffName != "Anil") {
+			t.Errorf("refunded order: %+v", o)
+		}
+	}
+	if reasons[voided.Id] != "Wrong item rung up" || reasons[test.Id] != store.TestOrderReason || len(reasons) != 2 {
+		t.Errorf("voids: %v", reasons)
+	}
+	var tooLong api.Error
+	if code := c.do("GET", "/v1/admin/reports/orders?from=2026-10-01&to=2026-11-15", nil, &tooLong); code != 400 {
+		t.Errorf("more than 31 days: %d", code)
+	}
 	if len(rep.Days) != 2 || rep.Days[0] != (api.DaySales{Date: "2026-11-14", Orders: 3, GrossFils: 550, RefundsFils: 100, NetFils: 450}) ||
 		rep.Days[1] != (api.DaySales{Date: "2026-11-15", Orders: 1, GrossFils: 200, NetFils: 200}) {
 		t.Errorf("days %+v", rep.Days)

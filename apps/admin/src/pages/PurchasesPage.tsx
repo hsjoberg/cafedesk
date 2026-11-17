@@ -16,10 +16,10 @@ import {
 } from "../api/client";
 import { areas, unitOf, units } from "../areas";
 import { OverdueInvoices } from "../components/Overdue";
-import { guessIngredient, guessIngredientName, guessPack, packFor, parsePack } from "../guess";
+import { guessIngredient, guessIngredientName, packFor, parsePack, suggestUnit } from "../guess";
 import { addDays, isDate, purchasePresets, rangeLabel, shortDate, todayIn } from "../dates";
 import { formatAmount, formatFils, formatQuantity, parseAmount, parseQuantity } from "../money";
-import { me } from "../state";
+import { catalog, me, reloadCatalog } from "../state";
 import { DeleteButton, EditorHead, fieldError, FormError, toSaveError, type SaveError } from "../ui";
 
 const share = (part: number, whole: number) => {
@@ -43,6 +43,8 @@ type LineDraft = {
   amount: string;
   /** Typed by hand, so quantity and price no longer set it. */
   amountTyped: boolean;
+  /** The unit the quantity counts in, as the invoice prints it: EA, CAR, PAC. Optional. */
+  uom: string;
   /** For a new product: the ingredient it is ("" for none or later, or NEW), and how much one holds. */
   sortTo: string;
   pack: string;
@@ -50,9 +52,18 @@ type LineDraft = {
   newUnit: Unit;
   /** Chosen by hand, so the product's name no longer suggests them. */
   sortTouched: boolean;
+  /** Typed by hand, so the name and unit no longer suggest it. */
+  packTouched: boolean;
+  /** With sortTo SOLD: the menu item the product is sold as, as it is. */
+  soldAs: string;
 };
 const NEW = "new";
-const unsorted = { sortTo: "", pack: "", newName: "", newUnit: "g" as Unit, sortTouched: false };
+/** Sold as it is: the product is a menu item, one to one, such as a can. */
+const SOLD = "sold";
+const unsorted = { sortTo: "", pack: "", newName: "", newUnit: "g" as Unit, sortTouched: false, packTouched: false, soldAs: "" };
+/** Units invoices print, offered as the line's unit is typed. */
+const commonUoms = ["EA", "CAR", "PAC", "BAG", "BOX", "CTN", "PCS", "KG", "BTL", "CAN", "TIN"];
+const normalUom = (u: string) => u.trim().toUpperCase();
 type Draft = {
   date: string;
   shopId: string;
@@ -70,7 +81,7 @@ const VAT = () => (me()?.organization.vatPercent ?? 0) / 100;
 /** The VAT as people write it: "5%". */
 const vatLabel = () => `${me()?.organization.vatPercent ?? 0}%`;
 
-const blankLine = (): LineDraft => ({ code: "", product: "", area: "counter", qty: "", price: "", amount: "", amountTyped: false,
+const blankLine = (): LineDraft => ({ code: "", product: "", area: "counter", qty: "", price: "", amount: "", amountTyped: false, uom: "",
   ...unsorted });
 
 /** Purchases: what was bought, and where the money went. */
@@ -164,6 +175,7 @@ export function PurchasesPage() {
               price: formatFils(l.unitPriceFils),
               amount: formatFils(l.totalFils),
               amountTyped: l.totalFils !== Math.round(l.quantity * l.unitPriceFils * (p.pricesBeforeVat ? 1 + VAT() : 1)),
+              uom: l.uom,
               ...unsorted,
             })),
           }
@@ -215,41 +227,123 @@ export function PurchasesPage() {
         l.area = known.area;
         if (!l.code && known.code) l.code = known.code;
         if (!l.price && known.lastUnitPriceFils != null) l.price = formatFils(known.lastUnitPriceFils);
+        if (!l.uom && known.lastUom) l.uom = known.lastUom;
       } else if (!l.sortTouched) {
         // What the name suggests, for a person to check.
         const ing = guessIngredient(name, ingredients());
-        const size = guessPack(name);
         l.sortTo = ing?.id ?? "";
-        l.pack = String(packFor(name, ing?.unit) ?? "");
         const sibling = ing && products().find((p) => p.ingredientId === ing.id);
         if (sibling) l.area = sibling.area;
         l.newName = guessIngredientName(name);
-        l.newUnit = size?.unit ?? "g";
+        l.newUnit = suggestUnit(name);
       }
     }));
+    suggestPack(i);
     reprice(i);
   };
+  /** The product a line names, if it is one already bought. */
+  const knownOf = (l: LineDraft) => (l.productId && products().find((p) => p.id === l.productId)) || productNamed(l.product);
+  /**
+   * How much one of the line's unit holds of a sorted product, if it knows:
+   * its pack for the unit, else its main one where that goes for the line.
+   */
+  const knownPack = (l: LineDraft): number | null => {
+    const p = knownOf(l);
+    if (!p?.ingredientId) return null;
+    const u = normalUom(l.uom);
+    const own = u ? p.packs.find((x) => x.uom === u) : undefined;
+    if (own) return own.packAmount;
+    if (p.packAmount != null && (!u || p.packUom === "" || p.packUom === u)) return p.packAmount;
+    return null;
+  };
+  /**
+   * A sorted product bought in a unit it hasn't been yet: the line asks what
+   * one holds, once. A pack size given without a unit is asked about too, so
+   * the product learns whose it is.
+   */
+  const needsPack = (l: LineDraft) => {
+    const p = knownOf(l);
+    const u = normalUom(l.uom);
+    if (!p?.ingredientId || !u) return false;
+    if (p.packs.some((x) => x.uom === u)) return false;
+    return !(p.packAmount != null && p.packUom === u);
+  };
+  /** Fills in what one holds, as the name and unit suggest, unless typed. */
+  const suggestPack = (i: number) =>
+    setD(produce((x) => {
+      const l = x.lines[i]!;
+      if (l.packTouched) return;
+      const p = knownOf(l);
+      if (p && needsPack(l)) {
+        const ing = ingredients().find((y) => y.id === p.ingredientId);
+        l.pack = p.packUom === "" && p.packAmount != null ? String(p.packAmount) : String(packFor(p.name, ing?.unit, l.uom) ?? "");
+        return;
+      }
+      l.pack = String(packFor(l.product, lineUnit(l), l.uom) ?? "");
+    }));
   const isNew = (l: LineDraft) => l.product.trim() !== "" && !productNamed(l.product);
-  const lineUnit = (l: LineDraft): Unit | undefined =>
-    l.sortTo === NEW ? l.newUnit : ingredients().find((x) => x.id === l.sortTo)?.unit;
+  const lineUnit = (l: LineDraft): Unit | undefined => {
+    if (l.sortTo === NEW) return l.newUnit;
+    if (l.sortTo === SOLD) return "piece";
+    const known = knownOf(l);
+    const id = isNew(l) ? l.sortTo : known?.ingredientId;
+    return ingredients().find((x) => x.id === id)?.unit;
+  };
   const setSortTo = (i: number, to: string) =>
     setD(produce((x) => {
       const l = x.lines[i]!;
       l.sortTo = to;
       l.sortTouched = true;
-      const unit = to === NEW ? l.newUnit : ingredients().find((y) => y.id === to)?.unit;
-      l.pack = String(packFor(l.product, unit) ?? "");
+      const unit = to === NEW ? l.newUnit : to === SOLD ? "piece" : ingredients().find((y) => y.id === to)?.unit;
+      if (!l.packTouched) l.pack = String(packFor(l.product, unit, l.uom) ?? "");
       // The area its ingredient's other products go to.
       const sibling = products().find((p) => p.ingredientId === to);
       if (sibling) l.area = sibling.area;
     }));
+  /** What one of the line's unit cost, as paid: its amount over how many. */
+  const costEach = (l: LineDraft) => {
+    const q = parseQuantity(l.qty);
+    const a = money(l.amount);
+    return q !== null && q > 0 && a !== null ? a / q : null;
+  };
+  /**
+   * "2,000 g, at 24.13 per kg": how much, and its price by the kg, litre or
+   * piece. n is how much one of the line's unit holds; times is how many
+   * of them the amount shown is.
+   */
+  const amountAndPrice = (n: number, unit: Unit, l: LineDraft, times = 1) => {
+    const u = unitOf(unit);
+    const total = round3(n * times);
+    let text = `${new Intl.NumberFormat("en").format(total)} ${unit === "piece" && total === 1 ? "piece" : u.short}`;
+    const each = costEach(l);
+    if (each !== null && n > 0) text += `, at ${formatFils(Math.round((each / n) * u.scale))} ${u.per}`;
+    return text;
+  };
   const packHint = (l: LineDraft) => {
     const unit = lineUnit(l);
     if (!unit) return "";
     if (!l.pack.trim()) return `How much one holds, in ${unitOf(unit).label.toLowerCase()}, as 48 x 170. Or leave it for later.`;
     const n = parsePack(l.pack);
-    return n === null ? "Type a number, or one like 48 x 170." : `= ${new Intl.NumberFormat("en").format(n)} ${unitOf(unit).short}`;
+    return n === null ? "Type a number, or one like 48 x 170." : `= ${amountAndPrice(n, unit, l)}.`;
   };
+  /** For a sorted product whose size is known: what the line comes to, to check it. */
+  const knownHint = (l: LineDraft) => {
+    const p = knownOf(l);
+    const pack = knownPack(l);
+    const unit = lineUnit(l);
+    const q = parseQuantity(l.qty);
+    if (!p || pack === null || !unit || needsPack(l)) return "";
+    const ing = ingredients().find((x) => x.id === p.ingredientId);
+    return `${ing?.name ?? "It"}: ${amountAndPrice(pack, unit, l, q ?? 1)}${q === null ? " each" : ""}.`;
+  };
+  const round3 = (n: number) => Math.round(n * 1000) / 1000;
+  const uomsSeen = createMemo(() => [...new Set([...commonUoms, ...products().flatMap((p) =>
+    [p.packUom, p.lastUom ?? "", ...p.packs.map((x) => x.uom)]).filter(Boolean)])]);
+  /** Menu items to sell a product as, with whether they have a recipe. */
+  const menuItems = () => catalog()?.items ?? [];
+  onMount(() => {
+    if (!catalog()) void reloadCatalog();
+  });
 
   const lineTotal = (l: LineDraft) => money(l.amount) ?? 0;
   const total = createMemo(() => d.lines.reduce((s, l) => s + lineTotal(l), 0));
@@ -292,7 +386,7 @@ export function PurchasesPage() {
     setD("beforeVat", p.pricesBeforeVat);
     setD("lines", p.lines.map((l) => ({
       productId: l.productId, code: l.productCode ?? "", product: l.productName, area: l.area, qty: "",
-      price: formatFils(l.unitPriceFils), amount: "", amountTyped: false, ...unsorted,
+      price: formatFils(l.unitPriceFils), amount: "", amountTyped: false, uom: l.uom, ...unsorted,
     })));
   };
   const blankDraft = () => d.lines.every((l) => !l.product && !l.qty && !l.amount);
@@ -305,11 +399,15 @@ export function PurchasesPage() {
       // Empty lines go, so the rest keep the places errors name.
       const kept = d.lines.filter((l) => l.product.trim() || l.qty.trim() || l.amount.trim());
       if (kept.length !== d.lines.length) setD("lines", kept.length ? kept : [blankLine()]);
-      // New ingredients first, one per name, so lines can name them.
+      // New ingredients first, one per name, so lines can name them. A
+      // product sold as it is gets one named after its menu item.
       const made = new Map<string, string>();
+      const soldName = (l: LineDraft) => menuItems().find((it) => it.id === l.soldAs)?.name ?? "";
       for (const [i, l] of kept.entries()) {
-        if (!isNew(l) || l.sortTo !== NEW) continue;
-        const name = l.newName.trim();
+        if (!isNew(l) || (l.sortTo !== NEW && l.sortTo !== SOLD)) continue;
+        if (l.sortTo === SOLD && !l.soldAs) throw { field: `lines.${i}.soldAs`, message: "Choose the menu item it is sold as." };
+        const name = l.sortTo === SOLD ? soldName(l) : l.newName.trim();
+        const unit: Unit = l.sortTo === SOLD ? "piece" : l.newUnit;
         if (!name) throw { field: `lines.${i}.newName`, message: "Name the new ingredient, as Rice or Milk." };
         const key = name.toLowerCase();
         if (made.has(key)) continue;
@@ -319,7 +417,7 @@ export function PurchasesPage() {
           continue;
         }
         try {
-          const x = await call(api.POST("/v1/admin/ingredients", { body: { name, unit: l.newUnit } }));
+          const x = await call(api.POST("/v1/admin/ingredients", { body: { name, unit } }));
           made.set(key, x.id);
           // Known from now on, so a retry after a refused save reuses it.
           setIngredients((list) => [...list, x]);
@@ -339,7 +437,10 @@ export function PurchasesPage() {
           let ingredientId: string | undefined;
           let packAmount: number | undefined;
           if (isNew(l) && l.sortTo) {
-            ingredientId = l.sortTo === NEW ? made.get(l.newName.trim().toLowerCase()) : l.sortTo;
+            ingredientId = l.sortTo === NEW ? made.get(l.newName.trim().toLowerCase())
+              : l.sortTo === SOLD ? made.get(soldName(l).toLowerCase()) : l.sortTo;
+          }
+          if ((isNew(l) && l.sortTo) || needsPack(l)) {
             if (l.pack.trim()) {
               const n = parsePack(l.pack);
               if (n === null) throw { field: `${f}.packAmount`, message: "Type how much one holds, as 10000 or 48 x 170." };
@@ -348,7 +449,7 @@ export function PurchasesPage() {
           }
           return { productId: known, productName: known ? undefined : l.product, productCode: l.code.trim() || undefined,
             area: l.area, quantity, unitPriceFils, totalFils, vatFils: d.beforeVat ? lineVat(l) : undefined,
-            ingredientId, packAmount };
+            ingredientId, packAmount, uom: normalUom(l.uom) || undefined };
         });
       const supplier = supplierNamed(d.supplier);
       const body: PurchaseInput = {
@@ -364,6 +465,19 @@ export function PurchasesPage() {
       const saved = id
         ? await call(api.PUT("/v1/admin/purchases/{id}", { params: { path: { id } }, body }))
         : await call(api.POST("/v1/admin/purchases", { body }));
+      // Each product sold as it is: its menu item's recipe is one of it,
+      // unless the item has a recipe already.
+      const recipes: string[] = [];
+      for (const l of kept) {
+        if (!isNew(l) || l.sortTo !== SOLD) continue;
+        const item = menuItems().find((it) => it.id === l.soldAs);
+        const ing = made.get(soldName(l).toLowerCase());
+        if (!item || !ing || item.costFromRecipe || recipes.includes(item.id)) continue;
+        await call(api.PUT("/v1/admin/items/{id}/recipe", { params: { path: { id: item.id } },
+          body: { lines: [{ ingredientId: ing, amount: 1 }] } }));
+        recipes.push(item.id);
+      }
+      if (recipes.length) void reloadCatalog();
       if (supplier && !supplier.watched && d.watch) {
         await call(api.PUT("/v1/admin/suppliers/{id}", { params: { path: { id: supplier.id } },
           body: { watched: true, quietUntil: null } }));
@@ -609,10 +723,16 @@ export function PurchasesPage() {
                   </Show>
                   <div class="line-figures">
                     <label class="field">
-                      <span>How many</span>
+                      <span>Qty</span>
                       <input class="input" inputmode="decimal" value={l().qty}
                         onInput={(e) => { setD("lines", i, "qty", e.currentTarget.value); reprice(i); }}
                         aria-invalid={fieldError(error(), `lines.${i}.quantity`) ? "true" : undefined} />
+                    </label>
+                    <label class="field uom">
+                      <span>Unit</span>
+                      <input class="input" list="uoms" placeholder="EA" value={l().uom} autocapitalize="characters"
+                        onInput={(e) => { setD("lines", i, "uom", e.currentTarget.value); suggestPack(i); }}
+                        aria-invalid={fieldError(error(), `lines.${i}.uom`) ? "true" : undefined} />
                     </label>
                     <label class="field">
                       <span>{d.beforeVat ? "Rate, before VAT" : "Price each"}</span>
@@ -639,8 +759,26 @@ export function PurchasesPage() {
                           <option value="">None, or sort it later</option>
                           <For each={ingredients()}>{(x) => <option value={x.id} selected={l().sortTo === x.id}>{x.name}</option>}</For>
                           <option value={NEW} selected={l().sortTo === NEW}>A new ingredient…</option>
+                          <option value={SOLD} selected={l().sortTo === SOLD}>Sold as it is: a menu item…</option>
                         </select>
                       </label>
+                      <Show when={l().sortTo === SOLD}>
+                        <label class="field">
+                          <span>The menu item</span>
+                          <select class="input" value={l().soldAs} onChange={(e) => setD("lines", i, "soldAs", e.currentTarget.value)}
+                            aria-invalid={fieldError(error(), `lines.${i}.soldAs`) ? "true" : undefined}>
+                            <option value="" selected={!l().soldAs}>Choose…</option>
+                            <For each={menuItems()}>
+                              {(it) => <option value={it.id} selected={l().soldAs === it.id}>{it.name}</option>}
+                            </For>
+                          </select>
+                          <span class="meta">
+                            {menuItems().find((it) => it.id === l().soldAs)?.costFromRecipe
+                              ? "It has a recipe already, which stays. The new ingredient is named after it."
+                              : "Saving makes an ingredient named after it, and its recipe one of it."}
+                          </span>
+                        </label>
+                      </Show>
                       <Show when={l().sortTo === NEW}>
                         <div class="mod-row">
                           <label class="field">
@@ -662,16 +800,30 @@ export function PurchasesPage() {
                       </Show>
                       <Show when={lineUnit(l())}>
                         <label class="field">
-                          <span>One holds ({unitOf(lineUnit(l())!).short})</span>
+                          <span>{l().uom.trim() ? `One ${normalUom(l().uom)} holds` : "One holds"} ({unitOf(lineUnit(l())!).short})</span>
                           <input class="input" inputmode="decimal" value={l().pack}
-                            onInput={(e) => setD("lines", i, "pack", e.currentTarget.value)}
+                            onInput={(e) => setD("lines", i, (x) => ({ ...x, pack: e.currentTarget.value, packTouched: true }))}
                             aria-invalid={fieldError(error(), `lines.${i}.packAmount`) ? "true" : undefined} />
                           <span class="meta">{packHint(l())}</span>
                         </label>
                       </Show>
                     </div>
                   </Show>
-                  <For each={["productCode", "quantity", "unitPriceFils", "totalFils", "vatFils", "newName", "packAmount"]}>
+                  <Show when={!isNew(l()) && needsPack(l())}>
+                    <div class="sort-row">
+                      <label class="field">
+                        <span>New unit for it. One {normalUom(l().uom)} holds ({unitOf(lineUnit(l())!).short})</span>
+                        <input class="input" inputmode="decimal" value={l().pack}
+                          onInput={(e) => setD("lines", i, (x) => ({ ...x, pack: e.currentTarget.value, packTouched: true }))}
+                          aria-invalid={fieldError(error(), `lines.${i}.packAmount`) ? "true" : undefined} />
+                        <span class="meta">{packHint(l()) || "Asked once: the next invoice in it knows."}</span>
+                      </label>
+                    </div>
+                  </Show>
+                  <Show when={knownHint(l())}>
+                    <span class="meta line-check">{knownHint(l())}</span>
+                  </Show>
+                  <For each={["productCode", "uom", "quantity", "unitPriceFils", "totalFils", "vatFils", "newName", "soldAs", "packAmount"]}>
                     {(f) => (
                       <Show when={fieldError(error(), `lines.${i}.${f}`)}>
                         <span class="error">{fieldError(error(), `lines.${i}.${f}`)}</span>
@@ -696,6 +848,9 @@ export function PurchasesPage() {
             </Index>
             <datalist id="products">
               <For each={products()}>{(p) => <option value={p.name} />}</For>
+            </datalist>
+            <datalist id="uoms">
+              <For each={uomsSeen()}>{(u) => <option value={u} />}</For>
             </datalist>
             <datalist id="codes">
               <For each={products().filter((p) => p.code)}>{(p) => <option value={p.code!}>{p.name}</option>}</For>

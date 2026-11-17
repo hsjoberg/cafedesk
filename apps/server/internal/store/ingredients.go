@@ -22,9 +22,9 @@ const ingredientSelect = `SELECT i.id, i.name, i.unit,
 	FROM ingredients i LEFT JOIN LATERAL (
 		SELECT (SUM(x.total_fils) / NULLIF(SUM(x.qty_milli::numeric * x.pack_milli / 1000000), 0))::float8 AS cost,
 			MAX(x.date) AS last
-		FROM (SELECT l.total_fils, l.qty_milli, p.pack_milli, pu.date
+		FROM (SELECT l.total_fils, l.qty_milli, ` + linePack + ` AS pack_milli, pu.date
 			FROM purchase_lines l JOIN products p ON p.id = l.product_id JOIN purchases pu ON pu.id = l.purchase_id
-			WHERE p.ingredient_id = i.id AND p.pack_milli IS NOT NULL AND pu.deleted_at IS NULL
+			WHERE p.ingredient_id = i.id AND (` + linePack + `) IS NOT NULL AND pu.deleted_at IS NULL
 			ORDER BY pu.date DESC, pu.created_at DESC, l.position DESC LIMIT 3) x
 	) c ON true`
 
@@ -139,7 +139,12 @@ func (s *Store) DeleteIngredient(ctx context.Context, orgID, id uuid.UUID) error
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		if _, err := tx.Exec(ctx, "UPDATE products SET ingredient_id = NULL, pack_milli = NULL, updated_at = now() WHERE ingredient_id = $1", id); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM product_packs WHERE product_id IN (SELECT id FROM products WHERE ingredient_id = $1)`,
+			id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE products SET ingredient_id = NULL, pack_milli = NULL, pack_uom = '', updated_at = now()
+			WHERE ingredient_id = $1`, id); err != nil {
 			return err
 		}
 		return recost(ctx, tx, orgID)
@@ -164,15 +169,37 @@ func (s *Store) UpdateProduct(ctx context.Context, orgID, id uuid.UUID, in api.P
 				return &Problem{ErrNotFound, "That ingredient doesn't exist."}
 			}
 		}
+		packUom := NormalUom(deref(in.PackUom))
+		if pack == nil {
+			packUom = ""
+		}
 		tag, err := tx.Exec(ctx, `UPDATE products SET name = $3, area = $4, ingredient_id = $5, pack_milli = $6,
-			code = $7, updated_at = now() WHERE id = $1 AND org_id = $2 AND NOT archived`,
+			code = $7, pack_uom = $8, updated_at = now() WHERE id = $1 AND org_id = $2 AND NOT archived`,
 			id, orgID, strings.TrimSpace(in.Name), string(in.Area), in.IngredientId, pack,
-			nilIfEmpty(strings.TrimSpace(deref(in.Code))))
+			nilIfEmpty(strings.TrimSpace(deref(in.Code))), packUom)
 		if err != nil {
 			return taken(err, "product")
 		}
 		if tag.RowsAffected() == 0 {
 			return ErrNotFound
+		}
+		// The other units: replaced when given; gone with the ingredient.
+		if in.Packs != nil || in.IngredientId == nil {
+			if _, err := tx.Exec(ctx, "DELETE FROM product_packs WHERE product_id = $1", id); err != nil {
+				return err
+			}
+		}
+		if in.Packs != nil && in.IngredientId != nil {
+			for _, p := range *in.Packs {
+				uom := NormalUom(p.Uom)
+				if uom == "" || uom == packUom {
+					continue
+				}
+				if _, err := tx.Exec(ctx, `INSERT INTO product_packs (product_id, uom, pack_milli) VALUES ($1, $2, $3)
+					ON CONFLICT (product_id, uom) DO UPDATE SET pack_milli = excluded.pack_milli`, id, uom, Milli(p.PackAmount)); err != nil {
+					return err
+				}
+			}
 		}
 		// A new pack size or ingredient moves prices, and recipe costs.
 		return recost(ctx, tx, orgID)

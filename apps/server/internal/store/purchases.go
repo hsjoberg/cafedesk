@@ -67,13 +67,55 @@ func (s *Store) UpdateSupplier(ctx context.Context, orgID, id uuid.UUID, in api.
 	return api.Supplier{}, ErrNotFound
 }
 
+// linePack is how much one of purchase line l's unit holds, of product p:
+// the product's pack for that unit, else its main pack where that goes for
+// the line (given without a unit, or for the line's), else NULL: a line in a
+// unit the product doesn't know isn't counted.
+const linePack = `COALESCE((SELECT pp.pack_milli FROM product_packs pp WHERE pp.product_id = l.product_id AND pp.uom = l.uom),
+	CASE WHEN p.pack_uom = '' OR l.uom = '' OR p.pack_uom = l.uom THEN p.pack_milli END)`
+
+// NormalUom is an invoice's unit as kept: "car " is CAR.
+func NormalUom(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
+
+// ValidUom reports whether u, as NormalUom keeps it, can name a unit: up to
+// 8 letters and digits, as EA, CAR, PAC or 5KG.
+func ValidUom(u string) bool {
+	if len(u) > 8 {
+		return false
+	}
+	for _, r := range u {
+		if !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '.') {
+			return false
+		}
+	}
+	return true
+}
+
 // ListProducts lists what an organization buys, by name, each with its
 // latest purchase.
 func (s *Store) ListProducts(ctx context.Context, orgID uuid.UUID) ([]api.Product, error) {
+	packs := map[uuid.UUID][]api.ProductPack{}
+	prows, err := s.pool.Query(ctx, `SELECT pp.product_id, pp.uom, pp.pack_milli FROM product_packs pp
+		JOIN products p ON p.id = pp.product_id WHERE p.org_id = $1 ORDER BY pp.uom`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	for prows.Next() {
+		var id uuid.UUID
+		var uom string
+		var m int64
+		if err := prows.Scan(&id, &uom, &m); err != nil {
+			return nil, err
+		}
+		packs[id] = append(packs[id], api.ProductPack{Uom: uom, PackAmount: Unmilli(m)})
+	}
+	if err := prows.Err(); err != nil {
+		return nil, err
+	}
 	rows, err := s.pool.Query(ctx, `SELECT p.id, p.name, p.area, last.unit_price_fils, last.qty_milli, last.date::text,
-			p.ingredient_id, p.pack_milli, p.code, (last.total_fils * 1000.0 / last.qty_milli)::float8
+			p.ingredient_id, p.pack_milli, p.code, (last.total_fils * 1000.0 / last.qty_milli)::float8, p.pack_uom, last.uom
 		FROM products p LEFT JOIN LATERAL (
-			SELECT l.unit_price_fils, l.qty_milli, l.total_fils, pu.date FROM purchase_lines l JOIN purchases pu ON pu.id = l.purchase_id
+			SELECT l.unit_price_fils, l.qty_milli, l.total_fils, pu.date, l.uom FROM purchase_lines l JOIN purchases pu ON pu.id = l.purchase_id
 			WHERE l.product_id = p.id AND pu.deleted_at IS NULL
 			ORDER BY pu.date DESC, pu.created_at DESC, l.position DESC LIMIT 1) last ON true
 		WHERE p.org_id = $1 AND NOT p.archived ORDER BY lower(p.name)`, orgID)
@@ -83,8 +125,16 @@ func (s *Store) ListProducts(ctx context.Context, orgID uuid.UUID) ([]api.Produc
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (api.Product, error) {
 		var x api.Product
 		var qty, pack *int64
+		var lastUom *string
 		err := r.Scan(&x.Id, &x.Name, &x.Area, &x.LastUnitPriceFils, &qty, &x.LastPurchasedOn, &x.IngredientId, &pack,
-			&x.Code, &x.LastCostEachFils)
+			&x.Code, &x.LastCostEachFils, &x.PackUom, &lastUom)
+		x.Packs = packs[x.Id]
+		if x.Packs == nil {
+			x.Packs = []api.ProductPack{}
+		}
+		if lastUom != nil && *lastUom != "" {
+			x.LastUom = lastUom
+		}
 		if qty != nil {
 			q := Unmilli(*qty)
 			x.LastQuantity = &q
@@ -172,7 +222,49 @@ func productFor(ctx context.Context, tx pgx.Tx, orgID uuid.UUID, l api.PurchaseL
 		id, string(l.Area)); err != nil {
 		return id, name, err
 	}
-	return id, name, sortProduct(ctx, tx, orgID, id, l)
+	if err := sortProduct(ctx, tx, orgID, id, l); err != nil {
+		return id, name, err
+	}
+	return id, name, learnPack(ctx, tx, id, l)
+}
+
+// learnPack lets a sorted product learn what one of a line's unit holds,
+// the first time a line counts in it: its main pack, if it has none or had
+// one given without a unit and the line says it holds that; else a pack of
+// its own for the unit.
+func learnPack(ctx context.Context, tx pgx.Tx, id uuid.UUID, l api.PurchaseLineInput) error {
+	uom := NormalUom(deref(l.Uom))
+	if uom == "" {
+		return nil
+	}
+	var ing *uuid.UUID
+	var main *int64
+	var mainUom string
+	var known bool
+	if err := tx.QueryRow(ctx, `SELECT ingredient_id, pack_milli, pack_uom,
+		EXISTS (SELECT 1 FROM product_packs WHERE product_id = $1 AND uom = $2) FROM products WHERE id = $1`, id, uom).
+		Scan(&ing, &main, &mainUom, &known); err != nil {
+		return err
+	}
+	if ing == nil || known || (main != nil && mainUom == uom) {
+		return nil
+	}
+	var given *int64
+	if l.PackAmount != nil {
+		m := Milli(*l.PackAmount)
+		given = &m
+	}
+	var err error
+	switch {
+	case main == nil && given != nil:
+		_, err = tx.Exec(ctx, "UPDATE products SET pack_milli = $2, pack_uom = $3, updated_at = now() WHERE id = $1", id, *given, uom)
+	case main != nil && mainUom == "" && (given == nil || *given == *main):
+		// A pack size given without a unit was this unit's.
+		_, err = tx.Exec(ctx, "UPDATE products SET pack_uom = $2, updated_at = now() WHERE id = $1", id, uom)
+	case main != nil && given != nil:
+		_, err = tx.Exec(ctx, "INSERT INTO product_packs (product_id, uom, pack_milli) VALUES ($1, $2, $3)", id, uom, *given)
+	}
+	return err
 }
 
 // sortProduct gives a product the ingredient and pack size a purchase line
@@ -196,8 +288,12 @@ func sortProduct(ctx context.Context, tx pgx.Tx, orgID, id uuid.UUID, l api.Purc
 		m := Milli(*l.PackAmount)
 		pack = &m
 	}
-	_, err := tx.Exec(ctx, `UPDATE products SET ingredient_id = $2, pack_milli = $3, updated_at = now()
-		WHERE id = $1 AND ingredient_id IS NULL`, id, *l.IngredientId, pack)
+	uom := NormalUom(deref(l.Uom))
+	if pack == nil {
+		uom = ""
+	}
+	_, err := tx.Exec(ctx, `UPDATE products SET ingredient_id = $2, pack_milli = $3, pack_uom = $4, updated_at = now()
+		WHERE id = $1 AND ingredient_id IS NULL`, id, *l.IngredientId, pack, uom)
 	return err
 }
 
@@ -268,8 +364,9 @@ func savePurchase(ctx context.Context, tx pgx.Tx, orgID, id uuid.UUID, in api.Pu
 		total += l.TotalFils
 		vat += lineVAT
 		if _, err := tx.Exec(ctx, `INSERT INTO purchase_lines (purchase_id, position, product_id, area, qty_milli,
-			unit_price_fils, total_fils, vat_fils) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			id, i, product, string(l.Area), Milli(l.Quantity), l.UnitPriceFils, l.TotalFils, lineVAT); err != nil {
+			unit_price_fils, total_fils, vat_fils, uom) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			id, i, product, string(l.Area), Milli(l.Quantity), l.UnitPriceFils, l.TotalFils, lineVAT,
+			NormalUom(deref(l.Uom))); err != nil {
 			return err
 		}
 	}
@@ -375,7 +472,7 @@ func (s *Store) purchases(ctx context.Context, q pgx.Tx, where string, args ...a
 		ids[i], at[p.Id] = p.Id, i
 	}
 	rows, err = q.Query(ctx, `SELECT l.purchase_id, l.product_id, pr.name, l.area, l.qty_milli, l.unit_price_fils, l.total_fils,
-			l.vat_fils, pr.code
+			l.vat_fils, pr.code, l.uom
 		FROM purchase_lines l JOIN products pr ON pr.id = l.product_id
 		WHERE l.purchase_id = ANY($1) ORDER BY l.purchase_id, l.position`, ids)
 	if err != nil {
@@ -386,7 +483,7 @@ func (s *Store) purchases(ctx context.Context, q pgx.Tx, where string, args ...a
 		var l api.PurchaseLine
 		var qty int64
 		if err := rows.Scan(&pid, &l.ProductId, &l.ProductName, &l.Area, &qty, &l.UnitPriceFils, &l.TotalFils,
-			&l.VatFils, &l.ProductCode); err != nil {
+			&l.VatFils, &l.ProductCode, &l.Uom); err != nil {
 			return nil, err
 		}
 		l.Quantity = Unmilli(qty)

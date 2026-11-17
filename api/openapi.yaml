@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.15.0
+  version: 0.16.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
 
@@ -538,6 +538,40 @@ paths:
         "400":
           $ref: "#/components/responses/Error"
         "404":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/reports/orders:
+    get:
+      operationId: getOrders
+      summary: |
+        The orders of business dates, newest first, each with its lines,
+        whether it was voided and what was refunded of it: to look one up,
+        or tell test orders from real ones. At most 31 days, and 2,000 orders.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/LocalDate"
+        - name: to
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/LocalDate"
+        - name: shopId
+          in: query
+          description: One shop. Without it, every shop of the organization.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The orders.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderList"
+        "400":
           $ref: "#/components/responses/Error"
 
   /v1/admin/reports/usage:
@@ -1823,7 +1857,7 @@ components:
           $ref: "#/components/schemas/LocalDate"
     Product:
       type: object
-      required: [id, name, area]
+      required: [id, name, area, packUom, packs]
       properties:
         id:
           type: string
@@ -1858,6 +1892,30 @@ components:
           type: number
           format: double
           description: How much of its ingredient one holds, in the ingredient's unit, e.g. 8160 (g).
+        packUom:
+          type: string
+          description: |
+            The unit packAmount is for, as invoices print it (EA, CAR...);
+            empty when it was given without one, and goes for any line.
+        packs:
+          type: array
+          description: How much one of each other unit it comes in holds.
+          items:
+            $ref: "#/components/schemas/ProductPack"
+        lastUom:
+          type: string
+          description: The unit of its latest purchase line, if it gave one.
+    ProductPack:
+      type: object
+      required: [uom, packAmount]
+      properties:
+        uom:
+          type: string
+          description: As invoices print it, e.g. CAR.
+        packAmount:
+          type: number
+          format: double
+          description: In the ingredient's unit.
     ProductInput:
       type: object
       required: [name, area, ingredientId, packAmount]
@@ -1878,6 +1936,14 @@ components:
           format: double
           nullable: true
           description: Up to 3 decimals; null when not known, or with no ingredient.
+        packUom:
+          type: string
+          description: The unit packAmount is for; empty for any.
+        packs:
+          type: array
+          description: The other units and what one of each holds; left out to keep them.
+          items:
+            $ref: "#/components/schemas/ProductPack"
     Unit:
       type: string
       enum: [g, ml, piece]
@@ -1943,7 +2009,13 @@ components:
         packAmount:
           type: number
           format: double
-          description: How much of the ingredient one holds, in its unit.
+          description: |
+            How much of the ingredient one holds, in its unit: one of uom if
+            given. For a new product with ingredientId; or for a sorted
+            product that doesn't know uom yet, which learns it.
+        uom:
+          type: string
+          description: The unit quantity counts in, as the invoice prints it (EA, CAR, PAC...). Optional.
         area:
           $ref: "#/components/schemas/Area"
         quantity:
@@ -1961,8 +2033,11 @@ components:
           description: The line's amount, as the invoice has it.
     PurchaseLine:
       type: object
-      required: [productId, productName, area, quantity, unitPriceFils, totalFils, vatFils]
+      required: [productId, productName, area, quantity, unitPriceFils, totalFils, vatFils, uom]
       properties:
+        uom:
+          type: string
+          description: The unit quantity counts in; empty if the line didn't say.
         productCode:
           type: string
         vatFils:
@@ -2560,6 +2635,72 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OrderLineEvent"
+    OrderList:
+      type: object
+      required: [orders, more]
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderRow"
+        more:
+          type: boolean
+          description: There were more orders than the list holds.
+    OrderRow:
+      type: object
+      required: [id, code, createdAt, date, tillCode, staffName, paymentMethod, totalFils, status, refundedFils, lines]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          description: As the till printed it, e.g. T1-012.
+        createdAt:
+          type: string
+          format: date-time
+        date:
+          $ref: "#/components/schemas/LocalDate"
+        tillCode:
+          type: string
+        staffName:
+          type: string
+        paymentMethod:
+          $ref: "#/components/schemas/PaymentMethod"
+        totalFils:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [completed, voided]
+        voidReason:
+          type: string
+        voidedByName:
+          type: string
+        refundedFils:
+          type: integer
+          format: int64
+          description: What was refunded of it, 0 for nothing.
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderRowLine"
+    OrderRowLine:
+      type: object
+      required: [name, qty, lineTotalFils, options]
+      properties:
+        name:
+          type: string
+        qty:
+          type: integer
+        lineTotalFils:
+          type: integer
+          format: int64
+        options:
+          type: array
+          description: The options chosen that weren't the item's defaults.
+          items:
+            type: string
     PaymentMethod:
       type: string
       enum: [cash, card]
