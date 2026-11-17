@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,10 @@ type PrintDoc struct {
 	Title string // the print job's name in Windows
 	Lines []PrintLine
 	Kick  bool // open the cash drawer first (ESC/POS only)
+	// Image, when set, is what prints instead of the lines: a receipt drawn
+	// as a picture, so Arabic prints on any receipt printer. The lines stay
+	// as its text, in English.
+	Image *image.Gray
 }
 
 // ESC/POS commands, as Epson's printers and most receipt printers take.
@@ -48,6 +53,11 @@ func (d PrintDoc) ESCPOS() []byte {
 	b.Write(escInit)
 	if d.Kick {
 		b.Write(escKick)
+	}
+	if d.Image != nil {
+		b.Write(rasterESCPOS(d.Image))
+		b.Write(escFeedCut)
+		return b.Bytes()
 	}
 	for _, l := range d.Lines {
 		if l.Center {
@@ -110,6 +120,37 @@ func (b *docBuilder) heading(s string) {
 	b.line(PrintLine{Text: s, Big: true, Bold: true, Center: true})
 }
 
+// header writes the business's details at the top of a customer's slip:
+// its trade name, address and phone, or the till's shop name until the
+// admin has sent them.
+func (b *docBuilder) header(h ReceiptHeader, shopName string) {
+	name := h.TradeName
+	if name == "" {
+		name = shopName
+	}
+	b.heading(name)
+	for _, s := range []string{h.Address, phoneLine(h), licenceLine(h)} {
+		if s != "" {
+			b.line(PrintLine{Text: s, Center: true})
+		}
+	}
+	b.blank()
+}
+
+func phoneLine(h ReceiptHeader) string {
+	if h.Phone == "" {
+		return ""
+	}
+	return "Tel " + h.Phone
+}
+
+func licenceLine(h ReceiptHeader) string {
+	if h.LicenceNumber == "" {
+		return ""
+	}
+	return "Trade licence " + h.LicenceNumber
+}
+
 // pair puts left and right on one line, with the right edge flush.
 func (b *docBuilder) pair(left, right string, bold bool) {
 	b.line(PrintLine{Text: spread(ascii(left), ascii(right), b.width), Bold: bold})
@@ -156,6 +197,7 @@ func (b *docBuilder) item(qty int, name, amount string, mods []LineMod, big bool
 // shows the same lines.
 type Receipt struct {
 	ShopName  string
+	Header    ReceiptHeader
 	Footer    string
 	Code      string
 	Time      time.Time
@@ -169,7 +211,7 @@ type Receipt struct {
 }
 
 func receiptFor(o Order, cfg Config) Receipt {
-	return Receipt{ShopName: cfg.ShopName, Footer: cfg.ReceiptFooter, Code: o.Code, Time: o.CreatedAt,
+	return Receipt{ShopName: cfg.ShopName, Header: cfg.Header, Footer: cfg.ReceiptFooter, Code: o.Code, Time: o.CreatedAt,
 		StaffName: o.StaffName, Lines: o.Lines, Total: o.Total, Method: o.Method,
 		Tendered: o.Tendered, Change: o.Change}
 }
@@ -177,8 +219,7 @@ func receiptFor(o Order, cfg Config) Receipt {
 // Doc lays the receipt out for a printer of width characters.
 func (r Receipt) Doc(width int) PrintDoc {
 	b := newDoc("Receipt "+r.Code, width)
-	b.heading(r.ShopName)
-	b.blank()
+	b.header(r.Header, r.ShopName)
 	if r.Copy {
 		b.line(PrintLine{Text: "Copy", Bold: true, Center: true})
 	}
@@ -228,8 +269,7 @@ func kitchenDoc(o Order, width int) (PrintDoc, bool) {
 // drawer.
 func refundDoc(o Order, r Refund, cfg Config) PrintDoc {
 	b := newDoc("Refund "+o.Code, cfg.ReceiptWidth)
-	b.heading(cfg.ShopName)
-	b.blank()
+	b.header(cfg.Header, cfg.ShopName)
 	b.line(PrintLine{Text: "Refund", Bold: true, Center: true})
 	b.pair("Order "+o.Code, r.CreatedAt.Format("02 Jan 2006 15:04"), false)
 	b.text("Approved by " + r.ApprovedBy)
@@ -318,17 +358,22 @@ func testDoc(cfg Config, role string) PrintDoc {
 		return d
 	}
 	lines := []Line{
-		{Item: Item{Name: "Karak chai", Price: 100}, Qty: 2, Mods: []LineMod{{Name: "Less sugar"}}},
-		{Item: Item{Name: "Chicken biryani", Price: 1400}, Qty: 1},
+		{Item: Item{Name: "Karak chai", NameAR: "شاي كرك", Price: 100}, Qty: 2,
+			Mods: []LineMod{{Name: "Less sugar", NameAR: "سكر أقل"}}},
+		{Item: Item{Name: "Chicken biryani", NameAR: "برياني دجاج", Price: 1400}, Qty: 1},
 	}
-	r := Receipt{ShopName: cfg.ShopName, Footer: cfg.ReceiptFooter, Code: "TEST", Time: time.Now(),
+	r := Receipt{ShopName: cfg.ShopName, Header: cfg.Header, Footer: cfg.ReceiptFooter, Code: "TEST", Time: time.Now(),
 		StaffName: "Test", Lines: lines, Method: payCash}
 	for _, l := range lines {
 		r.Total += l.Total()
 	}
 	r.Tendered = money.FromDirhams(20)
 	r.Change = r.Tendered - r.Total
-	return r.Doc(cfg.ReceiptWidth)
+	d := r.Doc(cfg.ReceiptWidth)
+	if !cfg.PlainReceipts {
+		d.Image = r.Image(paperDots(cfg.ReceiptWidth))
+	}
+	return d
 }
 
 // minus formats an amount taken away: "-2.00", or "0.00" for none.

@@ -7,6 +7,7 @@ import { OptionsPage } from "./pages/OptionsPage";
 import { PurchasesPage } from "./pages/PurchasesPage";
 import { RecipesPage } from "./pages/RecipesPage";
 import { SalesPage } from "./pages/SalesPage";
+import { ShopPage } from "./pages/ShopPage";
 import { SignInPage } from "./pages/SignInPage";
 import { StaffPage } from "./pages/StaffPage";
 import { TillsPage } from "./pages/TillsPage";
@@ -26,6 +27,7 @@ export function App() {
         <Route path="/options" component={OptionsPage} />
         <Route path="/staff" component={StaffPage} />
         <Route path="/tills" component={TillsPage} />
+        <Route path="/shop" component={ShopPage} />
       </Route>
       <Route path="*" component={() => <Navigate href="/sales" />} />
     </Router>
@@ -87,6 +89,7 @@ function TopBar() {
         <A href="/options">Options</A>
         <A href="/staff">Staff</A>
         <A href="/tills">Tills</A>
+        <A href="/shop">Shop</A>
       </nav>
       <span class="spacer" />
       <span class="muted who">{me()?.user.name}</span>

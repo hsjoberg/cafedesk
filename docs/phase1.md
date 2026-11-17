@@ -39,7 +39,7 @@ Tap your name at the top right:
 |---|---|---|
 | Orders | The latest orders, each shown as its receipt. **Reprint**, **Refund** some or all of its items, or **Void** it. | Anyone; refunds and voids need a manager's PIN |
 | Day report | Sales so far. **Print day report** prints an X report. **Cash in or out**: cash put in or taken out other than by a sale (banked, a supplier paid, change added), with a reason. **Close the day**, with a count of the cash or without: a count shows short or over since the last count. The Z report prints and a backup is made. | Cash in or out and closing need a manager |
-| Settings | Shop name and receipt footer, receipt printer (paper width, drawer kick), kitchen printer, staff, backups, start-up and full screen. | Managers |
+| Settings | Shop name and receipt footer, receipt printer (paper width, drawer kick, receipts in English and Arabic), kitchen printer, staff, backups, the end of the day, start-up and full screen. | Managers |
 | Checks | The Phase 0 tests: touch, scrolling, Arabic, database, server. | Anyone |
 | Change my PIN | | Anyone |
 | Lock the till | Signs out. The next person enters their PIN. | Anyone |
@@ -49,6 +49,18 @@ stays in the records, marked, and doesn't count in sales.
 
 A day stays open past midnight until it is closed, so late nights count as
 one day.
+
+### Receipts in English and Arabic
+
+Receipts and refund slips print in English and Arabic: the business's trade
+name, address, phone and licence number from the admin's **Shop** page, each
+item with its Arabic name from the menu, and the labels in both. The till
+draws them as a picture, as it draws its screen, so Arabic prints joined and
+right to left on any receipt printer, in either print mode. Kitchen tickets
+and day reports, for staff, stay as text. **Receipts in English and Arabic**
+(Settings, receipt printer) turns this off, for a printer that can't print
+pictures: receipts are then text, in English only, which the law doesn't
+allow for customers.
 
 ### The drawer from day to day
 
@@ -110,6 +122,8 @@ the database now (not in the code), so the sync only has to fill its tables.
 - [ ] Refund one of two karaks; the day report shows it, and the expected
       cash drops by 1.00.
 - [ ] Close the day with a wrong count: the Z report says short or over.
+- [ ] A receipt prints in English and Arabic, with the shop's details from
+      the admin, in both print modes, and cuts.
 - [ ] Close the day without counting: the Z report says not counted, and the
       next sale starts a day with what the drawer should hold.
 - [ ] Take out cash as Banked: the day report shows it, and the expected cash

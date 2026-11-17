@@ -165,6 +165,10 @@ docker compose exec postgres dropdb -U cafedesk cafedesk_demo
     the till's own day report, so the two agree. Hours are the shop's clock.
   - A till that hasn't been in touch for 15 minutes is named under the totals:
     its later sales aren't in yet.
+  - **VAT**: once net sales over the last 12 months (every shop's) reach 80%
+    of AED 375,000, a notice says so; above it, that registering with the
+    Federal Tax Authority is required, within 30 days. Nothing shows below
+    that, or once a shop is registered.
 - **Menu**: category tabs and tiles, drawn as the till draws them. Click a tile
   to edit it on the right; the tile changes as you type. Add, edit, reorder and
   delete categories and items. Choose a category's band color, which option
@@ -172,6 +176,13 @@ docker compose exec postgres dropdb -U cafedesk cafedesk_demo
 - **Options**: option groups such as Sugar or Extras. "One" (a sugar level) or
   "Any number" (extras), each option with an Arabic name, a price change, and
   whether it is chosen when the item is tapped.
+- **Shop**: each shop's name in the admin, and what its receipts print at the
+  top: the trade name and address in English and Arabic, the phone and the
+  trade licence number. The UAE's consumer protection law (Federal Law 15 of
+  2020, Article 8) asks a receipt to show the trade name and address, in
+  Arabic, with other languages allowed beside it; the page says what a shop
+  still lacks, and shows the top of a receipt as it prints. Tills get the
+  details with every sync.
 - On a phone, the editor opens as a full-screen sheet.
 
 Deleting archives rather than erases, so that terminals hear about it when they

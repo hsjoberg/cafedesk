@@ -83,7 +83,11 @@ func (a *app) syncPanel(c *ui.Context) {
 }
 
 func (a *app) shopPanel(c *ui.Context) {
-	panel(c, "Shop", "Printed at the top and bottom of receipts.", func() {
+	about := "Printed at the top and bottom of receipts."
+	if h := a.cfg.Header; h.TradeName != "" {
+		about = "Receipts print the trade name and address from the admin's Shop page: " + h.TradeName + "."
+	}
+	panel(c, "Shop", about, func() {
 		settingRow(c, "shop-name", "Shop name", a.cfg.ShopName, false, func() {
 			a.editText("Shop name", a.cfg.ShopName, func(s string) {
 				if s != "" {
@@ -180,6 +184,15 @@ func (a *app) receiptPrinterPanel(c *ui.Context) {
 			}
 		})
 		switchRow(c, "drawer", "Open the cash drawer on cash sales", &a.cfg.OpenDrawer, a.saveConfig)
+		arabic := !a.cfg.PlainReceipts
+		switchRow(c, "arabic", "Receipts in English and Arabic", &arabic, func() {
+			a.cfg.PlainReceipts = !arabic
+			a.saveConfig()
+		})
+		if a.cfg.PlainReceipts {
+			ui.Text(c, "Receipts print in English only. The law asks for Arabic: turn this back on unless the printer "+
+				"can't print it.").FontSize(fsMeta).TextColor(colChili)
+		}
 		if button(c, "test-receipt", "Print a test receipt", btnOption, a.settings.print.busy).Clicked() {
 			a.testPrint(roleReceipt)
 		}

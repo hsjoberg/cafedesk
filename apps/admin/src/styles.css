@@ -1036,6 +1036,10 @@ fieldset.bare {
   border-left: 4px solid var(--chili);
   border-radius: 4px;
 }
+/* A notice to act on later, not now: getting close to registering for VAT. */
+.notice.calm {
+  border-left-color: var(--ink-muted);
+}
 .notice p {
   margin: 0;
   flex: 1 1 320px;
@@ -1396,4 +1400,32 @@ fieldset.bare {
 .invoice input[type="date"] {
   min-width: 0;
   width: 100%;
+}
+
+/* The top of a receipt, on the Shop page, as the till prints it. */
+.wall .subhead {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  margin: 20px 0 8px;
+}
+.receipt-head {
+  max-width: 340px;
+  background: var(--paper);
+  box-shadow: 0 2px 12px var(--scrim);
+  border-radius: 4px;
+  padding: 20px 22px;
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+.receipt-head strong {
+  font-size: var(--fs-item);
+  font-weight: 700;
+}
+/* Not filled in yet: what goes there, dashed, so it can't pass for the real thing. */
+.receipt-head .unset {
+  color: var(--ink-muted);
+  font-weight: 400;
+  text-decoration: underline dashed var(--rule);
+  text-underline-offset: 4px;
 }

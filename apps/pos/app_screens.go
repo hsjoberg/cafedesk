@@ -151,6 +151,9 @@ func (a *app) confirmRefund() {
 				a.day = &day
 				a.refund = nil
 				doc := refundDoc(order, ref, a.cfg)
+				if !a.cfg.PlainReceipts {
+					doc.Image = refundImage(a.withArabic(order), ref, a.cfg, paperDots(a.cfg.ReceiptWidth))
+				}
 				doc.Kick = ref.Method == payCash && a.cfg.OpenDrawer
 				a.enqueuePrint(roleReceipt, "Refund slip "+order.Code, doc, nil)
 				a.loadOrders(order.ID)

@@ -99,7 +99,8 @@ func (c *Catalog) DefaultMods(it Item) []LineMod {
 }
 
 func lineMod(g ModifierGroup, m Modifier) LineMod {
-	return LineMod{GroupID: g.ID, GroupName: g.Name, ID: m.ID, Name: m.Name, Delta: m.Delta, Default: m.Default}
+	return LineMod{GroupID: g.ID, GroupName: g.Name, ID: m.ID, Name: m.Name, NameAR: m.NameAR, Delta: m.Delta,
+		Default: m.Default}
 }
 
 // demoCatalog is the placeholder menu a new terminal starts with, so the

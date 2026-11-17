@@ -58,8 +58,8 @@ func (s *Store) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
 
 // User is someone who signs in to the admin.
 type User struct {
-	ID     uuid.UUID
-	OrgID  uuid.UUID
+	ID       uuid.UUID
+	OrgID    uuid.UUID
 	Username string
 	Name     string
 	Role     string // "owner" or "manager"
@@ -78,6 +78,7 @@ type Shop struct {
 	Name     string
 	Currency string
 	Timezone string
+	Details  ShopDetails
 }
 
 // Setup creates the first organization, its first shop, and its owner. It
@@ -200,17 +201,4 @@ func (s *Store) Org(ctx context.Context, id uuid.UUID) (Org, error) {
 		return o, ErrNotFound
 	}
 	return o, err
-}
-
-// Shops lists an organization's shops.
-func (s *Store) Shops(ctx context.Context, orgID uuid.UUID) ([]Shop, error) {
-	rows, err := s.pool.Query(ctx, "SELECT id, name, currency, timezone FROM shops WHERE org_id = $1 ORDER BY created_at", orgID)
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (Shop, error) {
-		var sh Shop
-		err := r.Scan(&sh.ID, &sh.Name, &sh.Currency, &sh.Timezone)
-		return sh, err
-	})
 }

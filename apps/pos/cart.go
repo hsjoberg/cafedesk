@@ -14,6 +14,7 @@ type LineMod struct {
 	GroupName string
 	ID        string
 	Name      string
+	NameAR    string // for receipts; not kept with the order, so filled in from the menu to print
 	Delta     money.Fils
 	Default   bool // the group's default: not worth printing on a receipt
 }

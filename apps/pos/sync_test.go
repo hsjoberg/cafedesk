@@ -78,7 +78,9 @@ func newFakeServer(t *testing.T) *fakeServer {
 			return
 		}
 		ch := api.Changes{Version: 7, Full: r.URL.Query().Get("since") == "0", Categories: []api.SyncCategory{},
-			Items: []api.SyncItem{}, ModifierGroups: []api.SyncModifierGroup{}, Staff: []api.SyncStaff{}}
+			Items: []api.SyncItem{}, ModifierGroups: []api.SyncModifierGroup{}, Staff: []api.SyncStaff{},
+			Shop: api.ReceiptHeader{TradeName: "Karak Corner Cafeteria", TradeNameAr: "كافتيريا ركن الكرك",
+				Address: "Downtown, Dubai", AddressAr: "وسط المدينة، دبي"}}
 		if ch.Full {
 			ch.Categories = []api.SyncCategory{{Id: tea, Name: "Hot drinks", Color: "#2F6690", Kitchen: false}}
 			ch.ModifierGroups = []api.SyncModifierGroup{{Id: sugar, Name: "Sugar", Modifiers: []api.SyncModifier{
@@ -179,6 +181,13 @@ func TestConnectAndSync(t *testing.T) {
 	}
 	if a.cfg.ShopID != f.shop.String() || a.cfg.TerminalCode != "T2" || a.cfg.ShopLabel != "Downtown" {
 		t.Errorf("config after connecting %+v", a.cfg)
+	}
+	// The receipt's header comes from the admin, and is kept.
+	if a.cfg.Header.TradeName != "Karak Corner Cafeteria" || a.cfg.Header.AddressAr != "وسط المدينة، دبي" {
+		t.Errorf("header %+v", a.cfg.Header)
+	}
+	if saved, err := loadConfig(a.cfgDir); err != nil || saved.Header != a.cfg.Header {
+		t.Errorf("header not saved: %+v, %v", saved.Header, err)
 	}
 	// The menu and staff are the admin's: there was never a demo menu or a
 	// till Owner.

@@ -312,7 +312,10 @@ type Changes struct {
 	Full           bool                `json:"full"`
 	Items          []SyncItem          `json:"items"`
 	ModifierGroups []SyncModifierGroup `json:"modifierGroups"`
-	Staff          []SyncStaff         `json:"staff"`
+
+	// Shop What a till prints at the top of its receipts, from its shop.
+	Shop  ReceiptHeader `json:"shop"`
+	Staff []SyncStaff   `json:"staff"`
 
 	// Version Ask for changes since this next time.
 	Version int64 `json:"version"`
@@ -863,6 +866,24 @@ type PurchaseList struct {
 	TotalFils int64 `json:"totalFils"`
 }
 
+// ReceiptHeader What a till prints at the top of its receipts, from its shop.
+type ReceiptHeader struct {
+	Address string `json:"address"`
+
+	// AddressAr The address in Arabic.
+	AddressAr string `json:"addressAr"`
+
+	// LicenceNumber The trade licence's number. Printed on receipts if set; empty leaves it off.
+	LicenceNumber string `json:"licenceNumber"`
+	Phone         string `json:"phone"`
+
+	// TradeName The business's name as on its trade licence, printed at the top of receipts.
+	TradeName string `json:"tradeName"`
+
+	// TradeNameAr The trade name in Arabic, as on the licence.
+	TradeNameAr string `json:"tradeNameAr"`
+}
+
 // RecipeCost defines model for RecipeCost.
 type RecipeCost struct {
 	// CostFils What its recipe costs now; missing while an ingredient has no price.
@@ -980,10 +1001,45 @@ type SalesTotals struct {
 
 // Shop defines model for Shop.
 type Shop struct {
-	Currency string             `json:"currency"`
-	Id       openapi_types.UUID `json:"id"`
-	Name     string             `json:"name"`
-	Timezone string             `json:"timezone"`
+	Address string `json:"address"`
+
+	// AddressAr The address in Arabic.
+	AddressAr string             `json:"addressAr"`
+	Currency  string             `json:"currency"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// LicenceNumber The trade licence's number. Printed on receipts if set; empty leaves it off.
+	LicenceNumber string `json:"licenceNumber"`
+
+	// Name What the shop is called in the admin and on its tills, such as its area.
+	Name     string `json:"name"`
+	Phone    string `json:"phone"`
+	Timezone string `json:"timezone"`
+
+	// TradeName The business's name as on its trade licence, printed at the top of receipts.
+	TradeName string `json:"tradeName"`
+
+	// TradeNameAr The trade name in Arabic, as on the licence.
+	TradeNameAr string `json:"tradeNameAr"`
+}
+
+// ShopInput defines model for ShopInput.
+type ShopInput struct {
+	Address string `json:"address"`
+
+	// AddressAr The address in Arabic.
+	AddressAr string `json:"addressAr"`
+
+	// LicenceNumber The trade licence's number. Printed on receipts if set; empty leaves it off.
+	LicenceNumber string `json:"licenceNumber"`
+	Name          string `json:"name"`
+	Phone         string `json:"phone"`
+
+	// TradeName The business's name as on its trade licence, printed at the top of receipts.
+	TradeName string `json:"tradeName"`
+
+	// TradeNameAr The trade name in Arabic, as on the licence.
+	TradeNameAr string `json:"tradeNameAr"`
 }
 
 // SignIn defines model for SignIn.
@@ -1219,6 +1275,27 @@ type User struct {
 // UserRole defines model for User.Role.
 type UserRole string
 
+// VatStatus defines model for VatStatus.
+type VatStatus struct {
+	// From A date in the shop's own time, YYYY-MM-DD.
+	From LocalDate `json:"from"`
+
+	// MandatoryFils Above this over 12 months, registering for VAT is required (AED 375,000).
+	MandatoryFils int64 `json:"mandatoryFils"`
+
+	// Registered A shop of the organization is registered for VAT.
+	Registered bool `json:"registered"`
+
+	// SalesFils Net sales of every shop, sales less refunds, over the 12 months from `from` to `to`.
+	SalesFils int64 `json:"salesFils"`
+
+	// To A date in the shop's own time, YYYY-MM-DD.
+	To LocalDate `json:"to"`
+
+	// VoluntaryFils Above this, registering is allowed (AED 187,500).
+	VoluntaryFils int64 `json:"voluntaryFils"`
+}
+
 // ID defines model for ID.
 type ID = openapi_types.UUID
 
@@ -1308,6 +1385,9 @@ type UpdatePurchaseJSONRequestBody = PurchaseInput
 
 // SignInJSONRequestBody defines body for SignIn for application/json ContentType.
 type SignInJSONRequestBody = SignIn
+
+// UpdateShopJSONRequestBody defines body for UpdateShop for application/json ContentType.
+type UpdateShopJSONRequestBody = ShopInput
 
 // CreateStaffJSONRequestBody defines body for CreateStaff for application/json ContentType.
 type CreateStaffJSONRequestBody = StaffInput

@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"image"
 	"runtime"
 	"unsafe"
 
@@ -45,12 +46,18 @@ var (
 	procCreateFontW   = gdi32.NewProc("CreateFontW")
 	procSelectObject  = gdi32.NewProc("SelectObject")
 	procDeleteObject  = gdi32.NewProc("DeleteObject")
+	procStretchDIBits = gdi32.NewProc("StretchDIBits")
 )
 
 const (
 	printerEnumLocal       = 0x2
 	printerEnumConnections = 0x4
 	logPixelsY             = 90
+	logPixelsX             = 88
+	horzRes                = 8
+	dibRGBColors           = 0
+	srcCopy                = 0x00CC0020
+	printerDots            = 203 // a receipt printer's dots an inch, as pictures are drawn for
 	defaultCharset         = 1
 	fixedPitchModern       = 0x1 | 0x30 // FIXED_PITCH | FF_MODERN
 )
@@ -228,6 +235,90 @@ func printText(printer, doc string, lines []PrintLine) error {
 			}
 		}
 		y += int(dpi) * points * scale * 13 / (72 * 10)
+	}
+	if r, _, err := procEndPage.Call(hdc); int32(r) <= 0 {
+		procAbortDoc.Call(hdc)
+		return fmt.Errorf("end page: %w", err)
+	}
+	if r, _, err := procEndDoc.Call(hdc); int32(r) <= 0 {
+		return fmt.Errorf("end print job: %w", err)
+	}
+	return nil
+}
+
+// bitmapInfoHeader is BITMAPINFOHEADER.
+type bitmapInfoHeader struct {
+	Size          uint32
+	Width         int32
+	Height        int32
+	Planes        uint16
+	BitCount      uint16
+	Compression   uint32
+	SizeImage     uint32
+	XPelsPerMeter int32
+	YPelsPerMeter int32
+	ClrUsed       uint32
+	ClrImportant  uint32
+}
+
+// printImage has the printer's driver print a picture drawn at 203 dots an
+// inch, as receipt printers print, scaled to the printer's own dots and
+// kept within its printable width.
+func printImage(printer, doc string, img *image.Gray) error {
+	driver, _ := windows.UTF16PtrFromString("WINSPOOL")
+	device, err := windows.UTF16PtrFromString(printer)
+	if err != nil {
+		return err
+	}
+	hdc, _, err := procCreateDCW.Call(uintptr(unsafe.Pointer(driver)), uintptr(unsafe.Pointer(device)), 0, 0)
+	if hdc == 0 {
+		return fmt.Errorf("open printer %q: %w", printer, err)
+	}
+	defer procDeleteDC.Call(hdc)
+
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w == 0 || h == 0 {
+		return errors.New("nothing to print")
+	}
+	// 32-bit pixels, top row first.
+	pix := make([]byte, w*h*4)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			v := img.GrayAt(b.Min.X+x, b.Min.Y+y).Y
+			o := (y*w + x) * 4
+			pix[o], pix[o+1], pix[o+2] = v, v, v
+		}
+	}
+	bi := bitmapInfoHeader{Width: int32(w), Height: -int32(h), Planes: 1, BitCount: 32}
+	bi.Size = uint32(unsafe.Sizeof(bi))
+
+	dpi, _, _ := procGetDeviceCaps.Call(hdc, logPixelsX)
+	if dpi == 0 {
+		dpi = printerDots
+	}
+	dstW := w * int(dpi) / printerDots
+	if room, _, _ := procGetDeviceCaps.Call(hdc, horzRes); room > 0 && dstW > int(room) {
+		dstW = int(room)
+	}
+	dstH := h * dstW / w
+
+	docName, _ := windows.UTF16PtrFromString(doc)
+	di := docInfoW{DocName: docName}
+	di.Size = int32(unsafe.Sizeof(di))
+	if r, _, err := procStartDocW.Call(hdc, uintptr(unsafe.Pointer(&di))); int32(r) <= 0 {
+		return fmt.Errorf("start print job: %w", err)
+	}
+	if r, _, err := procStartPage.Call(hdc); int32(r) <= 0 {
+		procAbortDoc.Call(hdc)
+		return fmt.Errorf("start page: %w", err)
+	}
+	r, _, err := procStretchDIBits.Call(hdc, 0, 0, uintptr(dstW), uintptr(dstH), 0, 0, uintptr(w), uintptr(h),
+		uintptr(unsafe.Pointer(&pix[0])), uintptr(unsafe.Pointer(&bi)), dibRGBColors, srcCopy)
+	runtime.KeepAlive(pix)
+	if r == 0 {
+		procAbortDoc.Call(hdc)
+		return fmt.Errorf("draw the receipt: %w", err)
 	}
 	if r, _, err := procEndPage.Call(hdc); int32(r) <= 0 {
 		procAbortDoc.Call(hdc)

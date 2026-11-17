@@ -40,6 +40,26 @@ type Config struct {
 	// DayEnds is when a day still open closes by itself, without a count:
 	// "04:00", or "off". Empty is the default, defaultDayEnds.
 	DayEnds string `json:"dayEnds"`
+
+	// Header is what receipts print at the top: the shop's details from the
+	// admin, sent with every sync. Empty until then; ShopName stands in.
+	Header ReceiptHeader `json:"header"`
+	// PlainReceipts prints receipts as text, in English only, for a printer
+	// that can't print pictures. Otherwise they print as a picture, in
+	// English and Arabic.
+	PlainReceipts bool `json:"plainReceipts"`
+}
+
+// ReceiptHeader is the business's details, as receipts print them: the
+// UAE's consumer protection law asks for the trade name and the address,
+// in Arabic.
+type ReceiptHeader struct {
+	TradeName     string `json:"tradeName"`
+	TradeNameAr   string `json:"tradeNameAr"`
+	Address       string `json:"address"`
+	AddressAr     string `json:"addressAr"`
+	Phone         string `json:"phone"`
+	LicenceNumber string `json:"licenceNumber"`
 }
 
 const (

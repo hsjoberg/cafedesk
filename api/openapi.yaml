@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.13.0
+  version: 0.14.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
 
@@ -421,6 +421,47 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+  /v1/admin/shops/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      operationId: updateShop
+      summary: |
+        Changes a shop's name and the business details its receipts print:
+        the trade name and address, in English and Arabic, the phone number
+        and the licence number. The tills get them when they next sync.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShopInput"
+      responses:
+        "200":
+          description: The shop as it now is.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shop"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /v1/admin/reports/vat:
+    get:
+      operationId: getVatStatus
+      summary: |
+        The organization's sales over the last 12 months against the UAE's
+        VAT registration thresholds, for a business not yet registered.
+      responses:
+        "200":
+          description: The sales and the thresholds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VatStatus"
+
   /v1/admin/terminals/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
@@ -1029,17 +1070,100 @@ components:
 
     Shop:
       type: object
-      required: [id, name, currency, timezone]
+      required: [id, name, currency, timezone, tradeName, tradeNameAr, address, addressAr, phone, licenceNumber]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+          description: What the shop is called in the admin and on its tills, such as its area.
         currency:
           type: string
         timezone:
           type: string
+        tradeName:
+          type: string
+          description: The business's name as on its trade licence, printed at the top of receipts.
+        tradeNameAr:
+          type: string
+          description: The trade name in Arabic, as on the licence.
+        address:
+          type: string
+        addressAr:
+          type: string
+          description: The address in Arabic.
+        phone:
+          type: string
+        licenceNumber:
+          type: string
+          description: The trade licence's number. Printed on receipts if set; empty leaves it off.
+    ShopInput:
+      type: object
+      required: [name, tradeName, tradeNameAr, address, addressAr, phone, licenceNumber]
+      properties:
+        name:
+          type: string
+        tradeName:
+          type: string
+          description: The business's name as on its trade licence, printed at the top of receipts.
+        tradeNameAr:
+          type: string
+          description: The trade name in Arabic, as on the licence.
+        address:
+          type: string
+        addressAr:
+          type: string
+          description: The address in Arabic.
+        phone:
+          type: string
+        licenceNumber:
+          type: string
+          description: The trade licence's number. Printed on receipts if set; empty leaves it off.
+    ReceiptHeader:
+      type: object
+      required: [tradeName, tradeNameAr, address, addressAr, phone, licenceNumber]
+      description: What a till prints at the top of its receipts, from its shop.
+      properties:
+        tradeName:
+          type: string
+          description: The business's name as on its trade licence, printed at the top of receipts.
+        tradeNameAr:
+          type: string
+          description: The trade name in Arabic, as on the licence.
+        address:
+          type: string
+        addressAr:
+          type: string
+          description: The address in Arabic.
+        phone:
+          type: string
+        licenceNumber:
+          type: string
+          description: The trade licence's number. Printed on receipts if set; empty leaves it off.
+    VatStatus:
+      type: object
+      required: [from, to, salesFils, mandatoryFils, voluntaryFils, registered]
+      properties:
+        from:
+          $ref: "#/components/schemas/LocalDate"
+        to:
+          $ref: "#/components/schemas/LocalDate"
+        salesFils:
+          type: integer
+          format: int64
+          description: Net sales of every shop, sales less refunds, over the 12 months from `from` to `to`.
+        mandatoryFils:
+          type: integer
+          format: int64
+          description: Above this over 12 months, registering for VAT is required (AED 375,000).
+        voluntaryFils:
+          type: integer
+          format: int64
+          description: Above this, registering is allowed (AED 187,500).
+        registered:
+          type: boolean
+          description: A shop of the organization is registered for VAT.
 
     Move:
       type: object
@@ -2081,7 +2205,7 @@ components:
 
     Changes:
       type: object
-      required: [version, full, categories, items, modifierGroups, staff]
+      required: [version, full, categories, items, modifierGroups, staff, shop]
       description: |
         Rows changed after `since`, deleted ones with `archived` set. When `full`
         is set (since was 0), they are the whole menu and staff, and anything the
@@ -2109,6 +2233,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SyncStaff"
+        shop:
+          $ref: "#/components/schemas/ReceiptHeader"
     SyncCategory:
       type: object
       required: [id, name, nameAr, color, position, kitchen, archived]

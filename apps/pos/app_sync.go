@@ -176,8 +176,9 @@ func (a *app) syncNow() {
 }
 
 type syncResult struct {
-	catalog  *Catalog // the menu, when it changed
-	applied  bool     // the server's changes were saved
+	catalog  *Catalog       // the menu, when it changed
+	header   *ReceiptHeader // the shop's details for receipts, as the admin has them
+	applied  bool           // the server's changes were saved
 	err      error
 	rejected string
 	pending  int
@@ -201,6 +202,8 @@ func runSync(ctx context.Context, c *syncClient, st *Store) (res syncResult) {
 		res.err = err
 		return res
 	}
+	res.header = &ReceiptHeader{TradeName: ch.Shop.TradeName, TradeNameAr: ch.Shop.TradeNameAr, Address: ch.Shop.Address,
+		AddressAr: ch.Shop.AddressAr, Phone: ch.Shop.Phone, LicenceNumber: ch.Shop.LicenceNumber}
 	if ch.Version != since || ch.Full {
 		if err := st.ApplyChanges(ctx, ch); err != nil {
 			res.err = fmt.Errorf("save the menu from the admin: %w", err)
@@ -262,6 +265,10 @@ func (a *app) syncDone(res syncResult) {
 	}
 	if res.catalog != nil {
 		a.setCatalog(res.catalog)
+	}
+	if res.header != nil && *res.header != a.cfg.Header {
+		a.cfg.Header = *res.header
+		a.saveConfig()
 	}
 }
 

@@ -194,7 +194,7 @@ func (s *Server) writeMe(w http.ResponseWriter, r *http.Request, u store.User) {
 		Shops:        make([]api.Shop, 0, len(shops)),
 	}
 	for _, sh := range shops {
-		me.Shops = append(me.Shops, api.Shop{Id: sh.ID, Name: sh.Name, Currency: sh.Currency, Timezone: sh.Timezone})
+		me.Shops = append(me.Shops, store.APIShop(sh))
 	}
 	writeJSON(w, http.StatusOK, me)
 }

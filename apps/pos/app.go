@@ -196,6 +196,9 @@ func sendToPrinter(cfg Config, role string, doc PrintDoc) error {
 		return errors.New("no receipt printer is chosen. Choose one in Settings")
 	}
 	if mode == printWindows {
+		if doc.Image != nil {
+			return printImage(name, doc.Title, doc.Image)
+		}
 		return printText(name, doc.Title, doc.Lines)
 	}
 	return printRaw(name, doc.Title, doc.ESCPOS())
@@ -844,9 +847,12 @@ func (a *app) completeSale() {
 // printOrder prints an order's receipt and, if the kitchen prints, its
 // kitchen ticket.
 func (a *app) printOrder(o Order, reprint bool) {
-	r := receiptFor(o, a.cfg)
+	r := receiptFor(a.withArabic(o), a.cfg)
 	r.Copy = reprint
 	doc := r.Doc(a.cfg.ReceiptWidth)
+	if !a.cfg.PlainReceipts {
+		doc.Image = r.Image(paperDots(a.cfg.ReceiptWidth))
+	}
 	doc.Kick = !reprint && o.Method == payCash && a.cfg.OpenDrawer
 	a.printStatus = "Printing the receipt."
 	a.enqueuePrint(roleReceipt, "Receipt "+o.Code, doc, func(err error) {

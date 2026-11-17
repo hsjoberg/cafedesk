@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -75,7 +78,9 @@ func TestReceiptASCII(t *testing.T) {
 }
 
 func TestESCPOS(t *testing.T) {
-	doc := testDoc(defaultConfig(), roleReceipt)
+	cfg := defaultConfig()
+	cfg.PlainReceipts = true
+	doc := testDoc(cfg, roleReceipt)
 	b := doc.ESCPOS()
 	if !bytes.HasPrefix(b, escInit) || !bytes.HasSuffix(b, escFeedCut) {
 		t.Error("not framed by init and cut")
@@ -89,5 +94,68 @@ func TestESCPOS(t *testing.T) {
 	doc.Kick = true
 	if !bytes.HasPrefix(doc.ESCPOS(), append(append([]byte{}, escInit...), escKick...)) {
 		t.Error("no drawer kick")
+	}
+}
+
+func TestReceiptHeader(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Header = ReceiptHeader{TradeName: "Karak Corner Cafeteria", TradeNameAr: "كافتيريا ركن الكرك",
+		Address: "Shop 3, Downtown, Dubai", AddressAr: "محل 3، وسط المدينة، دبي", Phone: "04 123 4567"}
+	text := strings.Join(receiptFor(testOrder(), cfg).Doc(48).Text(48), "\n")
+	for _, want := range []string{"Karak Corner Cafeteria", "Shop 3, Downtown, Dubai", "Tel 04 123 4567"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("lacks %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, cfg.ShopName) || strings.Contains(text, "Trade licence") {
+		t.Errorf("the till's shop name, or a licence not set:\n%s", text)
+	}
+}
+
+// TestReceiptImage draws a receipt in English and Arabic, as it prints.
+// CAFEDESK_SNAPSHOTS saves it as a PNG, to look at.
+func TestReceiptImage(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.Header = ReceiptHeader{TradeName: "Karak Corner Cafeteria", TradeNameAr: "كافتيريا ركن الكرك",
+		Address: "Shop 3, Downtown, Dubai", AddressAr: "محل 3، وسط المدينة، دبي", Phone: "04 123 4567",
+		LicenceNumber: "1234567"}
+	o := testOrder()
+	o.Lines[0].Item.NameAR = "شاي كرك"
+	o.Lines[1].Mods[0].NameAR = "باروتا إضافية"
+	for _, width := range []int{48, 32} {
+		img := receiptFor(o, cfg).Image(paperDots(width))
+		b := img.Bounds()
+		if b.Dx() != paperDots(width) || b.Dy() < 400 || b.Dy() > 1600 {
+			t.Fatalf("width %d: %v", width, b)
+		}
+		black := 0
+		for _, v := range img.Pix {
+			if v == 0 {
+				black++
+			}
+		}
+		if black < 2000 {
+			t.Errorf("width %d: %d black dots", width, black)
+		}
+		raster := rasterESCPOS(img)
+		perRow := (b.Dx() + 7) / 8
+		bands := (b.Dy() + 254) / 255
+		if !bytes.HasPrefix(raster, []byte{0x1d, 0x76, 0x30, 0x00, byte(perRow), 0}) || len(raster) != perRow*b.Dy()+8*bands {
+			t.Errorf("width %d: raster of %d bytes", width, len(raster))
+		}
+		if dir := os.Getenv("CAFEDESK_SNAPSHOTS"); dir != "" {
+			os.MkdirAll(dir, 0o755)
+			f, err := os.Create(filepath.Join(dir, "receipt-"+map[int]string{48: "80mm", 32: "58mm"}[width]+".png"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			png.Encode(f, img)
+			f.Close()
+		}
+	}
+	// It is what prints, unless receipts are plain.
+	doc := testDoc(cfg, roleReceipt)
+	if doc.Image == nil || !bytes.Contains(doc.ESCPOS(), []byte{0x1d, 0x76, 0x30}) || bytes.Contains(doc.ESCPOS(), []byte("Chicken")) {
+		t.Error("the test receipt isn't a picture")
 	}
 }

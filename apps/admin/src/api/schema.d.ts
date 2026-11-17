@@ -323,6 +323,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/shops/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Changes a shop's name and the business details its receipts print:
+         *     the trade name and address, in English and Arabic, the phone number
+         *     and the licence number. The tills get them when they next sync.
+         */
+        put: operations["updateShop"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/reports/vat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organization's sales over the last 12 months against the UAE's
+         *     VAT registration thresholds, for a business not yet registered.
+         */
+        get: operations["getVatStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/terminals/{id}": {
         parameters: {
             query?: never;
@@ -726,9 +769,67 @@ export interface components {
         Shop: {
             /** Format: uuid */
             id: string;
+            /** @description What the shop is called in the admin and on its tills, such as its area. */
             name: string;
             currency: string;
             timezone: string;
+            /** @description The business's name as on its trade licence, printed at the top of receipts. */
+            tradeName: string;
+            /** @description The trade name in Arabic, as on the licence. */
+            tradeNameAr: string;
+            address: string;
+            /** @description The address in Arabic. */
+            addressAr: string;
+            phone: string;
+            /** @description The trade licence's number. Printed on receipts if set; empty leaves it off. */
+            licenceNumber: string;
+        };
+        ShopInput: {
+            name: string;
+            /** @description The business's name as on its trade licence, printed at the top of receipts. */
+            tradeName: string;
+            /** @description The trade name in Arabic, as on the licence. */
+            tradeNameAr: string;
+            address: string;
+            /** @description The address in Arabic. */
+            addressAr: string;
+            phone: string;
+            /** @description The trade licence's number. Printed on receipts if set; empty leaves it off. */
+            licenceNumber: string;
+        };
+        /** @description What a till prints at the top of its receipts, from its shop. */
+        ReceiptHeader: {
+            /** @description The business's name as on its trade licence, printed at the top of receipts. */
+            tradeName: string;
+            /** @description The trade name in Arabic, as on the licence. */
+            tradeNameAr: string;
+            address: string;
+            /** @description The address in Arabic. */
+            addressAr: string;
+            phone: string;
+            /** @description The trade licence's number. Printed on receipts if set; empty leaves it off. */
+            licenceNumber: string;
+        };
+        VatStatus: {
+            from: components["schemas"]["LocalDate"];
+            to: components["schemas"]["LocalDate"];
+            /**
+             * Format: int64
+             * @description Net sales of every shop, sales less refunds, over the 12 months from `from` to `to`.
+             */
+            salesFils: number;
+            /**
+             * Format: int64
+             * @description Above this over 12 months, registering for VAT is required (AED 375,000).
+             */
+            mandatoryFils: number;
+            /**
+             * Format: int64
+             * @description Above this, registering is allowed (AED 187,500).
+             */
+            voluntaryFils: number;
+            /** @description A shop of the organization is registered for VAT. */
+            registered: boolean;
         };
         Move: {
             /** @description The new place, from 0. Past the end means last. */
@@ -1426,6 +1527,7 @@ export interface components {
             items: components["schemas"]["SyncItem"][];
             modifierGroups: components["schemas"]["SyncModifierGroup"][];
             staff: components["schemas"]["SyncStaff"][];
+            shop: components["schemas"]["ReceiptHeader"];
         };
         SyncCategory: {
             /** Format: uuid */
@@ -2247,6 +2349,54 @@ export interface operations {
             };
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+        };
+    };
+    updateShop: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopInput"];
+            };
+        };
+        responses: {
+            /** @description The shop as it now is. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Shop"];
+                };
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    getVatStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sales and the thresholds. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VatStatus"];
+                };
+            };
         };
     };
     unpairTerminal: {

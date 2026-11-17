@@ -23,6 +23,12 @@ func (s *Store) Changes(ctx context.Context, t Terminal, since int64) (api.Chang
 		if err := tx.QueryRow(ctx, "SELECT catalog_version FROM organizations WHERE id = $1", t.OrgID).Scan(&ch.Version); err != nil {
 			return err
 		}
+		// The receipt's header goes with every answer: it is small, and a
+		// till then never prints an old address.
+		var err error
+		if ch.Shop, err = receiptHeader(ctx, tx, t.ShopID); err != nil {
+			return err
+		}
 		live := "AND NOT archived"
 		if !ch.Full {
 			live = ""
