@@ -433,7 +433,7 @@ export function PurchasesPage() {
           <Show when={shops().length > 1}>
             <select class="input shop" value={params.shop ?? ""} onChange={(e) => setParams({ shop: e.currentTarget.value || undefined })}>
               <option value="">All shops</option>
-              <For each={shops()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+              <For each={shops()}>{(s) => <option value={s.id} selected={(params.shop ?? "") === s.id}>{s.name}</option>}</For>
             </select>
           </Show>
         </div>
@@ -548,7 +548,7 @@ export function PurchasesPage() {
             <label class="field">
               <span>For the shop</span>
               <select class="input" value={d.shopId} onChange={(e) => setD("shopId", e.currentTarget.value)}>
-                <For each={shops()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+                <For each={shops()}>{(s) => <option value={s.id} selected={d.shopId === s.id}>{s.name}</option>}</For>
               </select>
             </label>
           </Show>
@@ -633,8 +633,8 @@ export function PurchasesPage() {
                         <span>New product. Which ingredient is it?</span>
                         <select class="input" value={l().sortTo} onChange={(e) => setSortTo(i, e.currentTarget.value)}>
                           <option value="">None, or sort it later</option>
-                          <For each={ingredients()}>{(x) => <option value={x.id}>{x.name}</option>}</For>
-                          <option value={NEW}>A new ingredient…</option>
+                          <For each={ingredients()}>{(x) => <option value={x.id} selected={l().sortTo === x.id}>{x.name}</option>}</For>
+                          <option value={NEW} selected={l().sortTo === NEW}>A new ingredient…</option>
                         </select>
                       </label>
                       <Show when={l().sortTo === NEW}>
@@ -651,7 +651,7 @@ export function PurchasesPage() {
                               setD("lines", i, "newUnit", e.currentTarget.value as Unit);
                               setSortTo(i, NEW);
                             }}>
-                              <For each={units}>{(u) => <option value={u.id}>{u.label}</option>}</For>
+                              <For each={units}>{(u) => <option value={u.id} selected={l().newUnit === u.id}>{u.label}</option>}</For>
                             </select>
                           </label>
                         </div>
@@ -678,7 +678,7 @@ export function PurchasesPage() {
                     <label class="area-pick">
                       <span class="meta">For</span>
                       <select class="input" value={l().area} onChange={(e) => setD("lines", i, "area", e.currentTarget.value as Area)}>
-                        <For each={areas}>{(a) => <option value={a.id}>{a.label}</option>}</For>
+                        <For each={areas}>{(a) => <option value={a.id} selected={l().area === a.id}>{a.label}</option>}</For>
                       </select>
                     </label>
                     <span class="spacer" />

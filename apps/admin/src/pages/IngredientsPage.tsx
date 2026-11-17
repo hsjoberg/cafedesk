@@ -282,15 +282,15 @@ export function IngredientsPage() {
             <label class="field">
               <span>Where it goes</span>
               <select class="input" value={pd.area} onChange={(e) => setPd("area", e.currentTarget.value as Area)}>
-                <For each={areas}>{(a) => <option value={a.id}>{a.label}</option>}</For>
+                <For each={areas}>{(a) => <option value={a.id} selected={pd.area === a.id}>{a.label}</option>}</For>
               </select>
             </label>
             <label class="field">
               <span>The ingredient it is</span>
               <select class="input" value={pd.ingredientId} onChange={(e) => setPd("ingredientId", e.currentTarget.value)}>
                 <option value="">None: recipes don't use it</option>
-                <For each={ingredients()}>{(x) => <option value={x.id}>{x.name}</option>}</For>
-                <option value={NEW}>A new ingredient…</option>
+                <For each={ingredients()}>{(x) => <option value={x.id} selected={pd.ingredientId === x.id}>{x.name}</option>}</For>
+                <option value={NEW} selected={pd.ingredientId === NEW}>A new ingredient…</option>
               </select>
             </label>
             <Show when={pd.ingredientId === NEW}>
@@ -300,7 +300,7 @@ export function IngredientsPage() {
                 <label class="field">
                   <span>Measured in</span>
                   <select class="input" value={pd.newUnit} onChange={(e) => setPd("newUnit", e.currentTarget.value as Unit)}>
-                    <For each={units}>{(u) => <option value={u.id}>{u.label}</option>}</For>
+                    <For each={units}>{(u) => <option value={u.id} selected={pd.newUnit === u.id}>{u.label}</option>}</For>
                   </select>
                 </label>
               </div>

@@ -159,7 +159,7 @@ export function SalesPage() {
           <Show when={shops().length > 1}>
             <select class="input shop" value={params.shop ?? ""} onChange={(e) => setParams({ shop: e.currentTarget.value || undefined })}>
               <option value="">All shops</option>
-              <For each={shops()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+              <For each={shops()}>{(s) => <option value={s.id} selected={(params.shop ?? "") === s.id}>{s.name}</option>}</For>
             </select>
           </Show>
         </div>

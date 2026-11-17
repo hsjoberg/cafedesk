@@ -206,7 +206,7 @@ export function TillsPage() {
               <label class="field">
                 <span>Shop</span>
                 <select class="input" value={shopId()} onChange={(e) => setShopId(e.currentTarget.value)}>
-                  <For each={shops()}>{(s) => <option value={s.id}>{s.name}</option>}</For>
+                  <For each={shops()}>{(s) => <option value={s.id} selected={shopId() === s.id}>{s.name}</option>}</For>
                 </select>
               </label>
             </Show>

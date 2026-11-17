@@ -296,7 +296,7 @@ export function MenuPage() {
             <label class="field">
               <span>Category</span>
               <select class="input" value={item.categoryId} onChange={(e) => setItem("categoryId", e.currentTarget.value)}>
-                <For each={categories()}>{(c) => <option value={c.id}>{c.name}</option>}</For>
+                <For each={categories()}>{(c) => <option value={c.id} selected={item.categoryId === c.id}>{c.name}</option>}</For>
               </select>
             </label>
             <fieldset class="field" style={{ border: "0", padding: "0", margin: "0" }}>
