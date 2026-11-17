@@ -132,13 +132,13 @@ func (s *Server) SignIn(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &in) {
 		return
 	}
-	key := s.clientIP(r) + "|" + strings.ToLower(strings.TrimSpace(in.Email))
+	key := s.clientIP(r) + "|" + store.NormalUsername(in.Username)
 	if !s.logins.allow(key, s.cfg.Now()) {
 		writeError(w, http.StatusTooManyRequests, "too_many_attempts",
 			"Too many attempts. Wait 15 minutes, then try again.", "")
 		return
 	}
-	u, hash, err := s.store.UserByEmail(r.Context(), in.Email)
+	u, hash, err := s.store.UserByUsername(r.Context(), in.Username)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		auth.BurnTime(in.Password) // as long as a wrong password takes
@@ -147,7 +147,7 @@ func (s *Server) SignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil || !auth.VerifyPassword(hash, in.Password) {
-		writeError(w, http.StatusUnauthorized, "wrong_credentials", "That email and password don't match.", "")
+		writeError(w, http.StatusUnauthorized, "wrong_credentials", "That username and password don't match.", "")
 		return
 	}
 	s.logins.reset(key)
@@ -189,7 +189,7 @@ func (s *Server) writeMe(w http.ResponseWriter, r *http.Request, u store.User) {
 		return
 	}
 	me := api.Me{
-		User:         api.User{Id: u.ID, Name: u.Name, Email: u.Email, Role: api.UserRole(u.Role)},
+		User:         api.User{Id: u.ID, Name: u.Name, Username: u.Username, Role: api.UserRole(u.Role)},
 		Organization: api.Organization{Id: org.ID, Name: org.Name},
 		Shops:        make([]api.Shop, 0, len(shops)),
 	}

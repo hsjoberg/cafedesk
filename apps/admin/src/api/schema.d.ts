@@ -701,7 +701,8 @@ export interface components {
             serverTime: string;
         };
         SignIn: {
-            email: string;
+            /** @description Not case sensitive. */
+            username: string;
             password: string;
         };
         Me: {
@@ -713,7 +714,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
-            email: string;
+            username: string;
             /** @enum {string} */
             role: "owner" | "manager";
         };

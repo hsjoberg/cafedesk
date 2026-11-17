@@ -77,7 +77,7 @@ docker compose up -d postgres
 #    It asks for a password twice. -demo-menu starts with the till's demo menu.
 cd apps/server
 export DATABASE_URL='postgres://cafedesk:cafedesk@localhost:5432/cafedesk?sslmode=disable'
-go run . setup -org "Your company" -shop "Downtown" -name "Your name" -email you@example.com -demo-menu
+go run . setup -org "Your company" -shop "Downtown" -name "Your name" -username yourname -demo-menu
 
 # 3. The server, on http://localhost:8080
 go run .
@@ -105,7 +105,7 @@ On Windows, in PowerShell:
 docker compose up -d postgres
 cd apps\server
 $env:DATABASE_URL = 'postgres://cafedesk:cafedesk@localhost:5432/cafedesk?sslmode=disable'
-go run . setup -org "Your company" -shop "Downtown" -name "Your name" -email you@example.com -demo-menu
+go run . setup -org "Your company" -shop "Downtown" -name "Your name" -username yourname -demo-menu
 cd ..\admin
 bun install
 bun run build
@@ -181,9 +181,10 @@ rows above N (step 4).
 ## Security
 
 - **Admin passwords** are hashed with Argon2id (19 MiB, 2 passes) and are at
-  least 10 characters. Ten failed sign-ins for an email from one address lock
-  it out for 15 minutes. A wrong email takes as long to answer as a wrong
-  password.
+  least 10 characters. Ten failed sign-ins for a username from one address
+  lock it out for 15 minutes. A wrong username takes as long to answer as a
+  wrong password. Admins sign in with a username, not an email: the server
+  sends no email.
 - **Sessions** are a random 32-byte token in a cookie that is `HttpOnly`,
   `Secure` and `SameSite=Lax`, valid for 14 days. The database keeps only the
   token's SHA-256, so a stolen database signs no one in. Signing out deletes

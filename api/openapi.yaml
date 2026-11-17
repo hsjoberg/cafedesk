@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
   title: Cafedesk API
-  version: 0.11.0
+  version: 0.12.0
   description: |
     The contract between the Cafedesk server, the POS terminals and the admin.
 
-    The admin signs in with an email and password and gets a session cookie
+    The admin signs in with a username and password and gets a session cookie
     (`cafedesk_session`: HttpOnly, Secure, SameSite=Lax). Requests that change
     data must be JSON and come from the admin's own origin.
 
@@ -981,10 +981,11 @@ components:
 
     SignIn:
       type: object
-      required: [email, password]
+      required: [username, password]
       properties:
-        email:
+        username:
           type: string
+          description: Not case sensitive.
         password:
           type: string
 
@@ -1003,14 +1004,14 @@ components:
 
     User:
       type: object
-      required: [id, name, email, role]
+      required: [id, name, username, role]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
-        email:
+        username:
           type: string
         role:
           type: string

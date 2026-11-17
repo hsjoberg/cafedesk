@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// otherOrg makes a second organization with a user, other@example.com, for
+// otherOrg makes a second organization with a user, other, for
 // tests that check organizations stay apart. Setup only makes the first.
 func otherOrg(pool *pgxpool.Pool) error {
 	ctx := context.Background()
@@ -19,8 +19,8 @@ func otherOrg(pool *pgxpool.Pool) error {
 	if _, err := pool.Exec(ctx, "INSERT INTO organizations (id, name) VALUES ($1, 'Other')", org); err != nil {
 		return err
 	}
-	_, err := pool.Exec(ctx, `INSERT INTO users (id, org_id, email, name, role, password_hash)
-		VALUES ($1, $2, 'other@example.com', 'Other', 'owner', $3)`, uuid.New(), org, hash)
+	_, err := pool.Exec(ctx, `INSERT INTO users (id, org_id, username, name, role, password_hash)
+		VALUES ($1, $2, 'other', 'Other', 'owner', $3)`, uuid.New(), org, hash)
 	return err
 }
 

@@ -190,17 +190,16 @@ when it was sold, by the till's clock. So:
 Purchases: `GET/POST /v1/admin/purchases`, `PUT/DELETE /v1/admin/purchases/{id}`,
 `GET /v1/admin/suppliers` and `GET /v1/admin/products`. A line names a known
 product by `productId`, or a product by `productName`, which is added if new;
-the supplier likewise. Quantities have up to 3 decimals, kept as thousandths
-(migration 0006).
+the supplier likewise. Quantities have up to 3 decimals, kept as thousandths.
 
 Recipes: `GET /v1/admin/recipes`, `PUT /v1/admin/items/{id}/recipe`,
 `PUT /v1/admin/modifiers/{id}/recipe`, `POST /v1/admin/batches`,
-`PUT/DELETE /v1/admin/batches/{id}` (migration 0009). Bought against used:
+`PUT/DELETE /v1/admin/batches/{id}`. Bought against used:
 `GET /v1/admin/reports/usage`.
 
 Ingredients: `GET/POST /v1/admin/ingredients`, `PUT/DELETE
 /v1/admin/ingredients/{id}`, and `PUT /v1/admin/products/{id}` for a product's
-name, area, ingredient and pack size (migration 0007). `unitCostFils` is fils
+name, area, ingredient and pack size. `unitCostFils` is fils
 per gram, millilitre or piece.
 
 `costFils` on `ItemInput`/`Item` and `ModifierInput`/`Modifier`: required, and
@@ -208,7 +207,7 @@ per gram, millilitre or piece.
 sales report adds `costFils`, `profitFils` and `uncostedFils` to the totals,
 and `costFils` to each item (missing when some of its sales had no cost).
 
-The history is in `item_costs` and `modifier_costs` (migration 0005). The
+The history is in `item_costs` and `modifier_costs`. The
 report looks a sale's cost up by its time, so no cost is copied onto sales;
 step 2 can still do that, when costs come from ingredient prices.
 

@@ -117,7 +117,7 @@ func TestIngredients(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := newClient(t, c.ts)
-	o.do("POST", "/v1/admin/session", api.SignIn{Email: "other@example.com", Password: ownerPassword}, nil)
+	o.do("POST", "/v1/admin/session", api.SignIn{Username: "other", Password: ownerPassword}, nil)
 	if code := o.do("PUT", "/v1/admin/products/"+carton.String(), api.ProductInput{Name: "Mine", Area: api.Other}, nil); code != 404 {
 		t.Errorf("another organization's product: %d", code)
 	}

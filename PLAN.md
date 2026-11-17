@@ -89,7 +89,7 @@ API handlers → services (catalog, order ingest, costing and margins, reports) 
 
 ### Auth
 - Terminals: device tokens from pairing.
-- Admin users: email and password (Argon2) or passkeys, with roles per org and per shop.
+- Admin users: username and password (Argon2) or passkeys, with roles per org and per shop.
 - Rate limiting on login and pairing. The server URL is public, so authentication is the protection.
 
 ### Data model (sketch)

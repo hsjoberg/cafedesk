@@ -68,8 +68,8 @@ func VerifyPassword(hash, pw string) bool {
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
-// dummyHash is checked against when no user has the email given, so a
-// wrong email takes as long as a wrong password.
+// dummyHash is checked against when no user has the username given, so a
+// wrong username takes as long as a wrong password.
 var dummyHash, _ = HashPassword("not anyone's password")
 
 // BurnTime spends the time a password check takes.

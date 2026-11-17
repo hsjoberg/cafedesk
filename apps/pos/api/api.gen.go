@@ -9,6 +9,30 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for Area.
+const (
+	Counter   Area = "counter"
+	Kitchen   Area = "kitchen"
+	Other     Area = "other"
+	Packaging Area = "packaging"
+)
+
+// Valid indicates whether the value is a known member of the Area enum.
+func (e Area) Valid() bool {
+	switch e {
+	case Counter:
+		return true
+	case Kitchen:
+		return true
+	case Other:
+		return true
+	case Packaging:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EventType.
 const (
 	BusinessDay EventType = "business_day"
@@ -108,6 +132,27 @@ func (e TerminalStatus) Valid() bool {
 	}
 }
 
+// Defines values for Unit.
+const (
+	G     Unit = "g"
+	Ml    Unit = "ml"
+	Piece Unit = "piece"
+)
+
+// Valid indicates whether the value is a known member of the Unit enum.
+func (e Unit) Valid() bool {
+	switch e {
+	case G:
+		return true
+	case Ml:
+		return true
+	case Piece:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserRole.
 const (
 	UserRoleManager UserRole = "manager"
@@ -124,6 +169,53 @@ func (e UserRole) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+// packaging (cups, boxes, bags), or other.
+type Area string
+
+// AreaSpend defines model for AreaSpend.
+type AreaSpend struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area       Area  `json:"area"`
+	BoughtFils int64 `json:"boughtFils"`
+
+	// SalesFils The area's own sales less refunds: the counter's are items not on
+	// the kitchen ticket, the kitchen's are items on it. Missing for
+	// packaging and other, which serve all sales.
+	SalesFils *int64 `json:"salesFils,omitempty"`
+}
+
+// Batch defines model for Batch.
+type Batch struct {
+	// CostFils What its recipe costs now; missing while an ingredient has no price.
+	CostFils *int64             `json:"costFils,omitempty"`
+	Id       openapi_types.UUID `json:"id"`
+	Lines    []RecipeLine       `json:"lines"`
+
+	// Missing The ingredients it uses that have no price yet.
+	Missing []string `json:"missing"`
+	Name    string   `json:"name"`
+
+	// PortionCostFils What one portion costs now, the batch's cost over its portions.
+	PortionCostFils *float64 `json:"portionCostFils,omitempty"`
+
+	// UsedBy How many items and options use it.
+	UsedBy        int     `json:"usedBy"`
+	YieldPortions float64 `json:"yieldPortions"`
+}
+
+// BatchInput defines model for BatchInput.
+type BatchInput struct {
+	Lines []RecipeLine `json:"lines"`
+
+	// Name What the chef calls it, e.g. "Chicken curry base".
+	Name string `json:"name"`
+
+	// YieldPortions How many portions one batch makes.
+	YieldPortions float64 `json:"yieldPortions"`
 }
 
 // BusinessDayEvent A day as it stands, opened or closed.
@@ -190,6 +282,42 @@ type Changes struct {
 	Version int64 `json:"version"`
 }
 
+// DayClose defines model for DayClose.
+type DayClose struct {
+	CashRefundsFils int64 `json:"cashRefundsFils"`
+	CashSalesFils   int64 `json:"cashSalesFils"`
+
+	// ClosedAt Missing while the day is open, or its close hasn't been sent yet.
+	ClosedAt     *time.Time `json:"closedAt,omitempty"`
+	ClosedByName *string    `json:"closedByName,omitempty"`
+	CountedFils  *int64     `json:"countedFils,omitempty"`
+
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date LocalDate `json:"date"`
+
+	// DifferenceFils Counted less expected; below 0 is short.
+	DifferenceFils *int64 `json:"differenceFils,omitempty"`
+
+	// ExpectedFils The float, plus cash sales, less cash refunds.
+	ExpectedFils int64              `json:"expectedFils"`
+	FloatFils    int64              `json:"floatFils"`
+	Id           openapi_types.UUID `json:"id"`
+	OpenedAt     time.Time          `json:"openedAt"`
+	OpenedByName string             `json:"openedByName"`
+	TerminalCode string             `json:"terminalCode"`
+	TerminalName string             `json:"terminalName"`
+}
+
+// DaySales defines model for DaySales.
+type DaySales struct {
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date        LocalDate `json:"date"`
+	GrossFils   int64     `json:"grossFils"`
+	NetFils     int64     `json:"netFils"`
+	Orders      int       `json:"orders"`
+	RefundsFils int64     `json:"refundsFils"`
+}
+
 // Error defines model for Error.
 type Error struct {
 	Error struct {
@@ -242,10 +370,66 @@ type EventResult struct {
 	Rejected *EventRejection `json:"rejected,omitempty"`
 }
 
+// HourSales defines model for HourSales.
+type HourSales struct {
+	GrossFils int64 `json:"grossFils"`
+	Hour      int   `json:"hour"`
+	Orders    int   `json:"orders"`
+}
+
+// Ingredient defines model for Ingredient.
+type Ingredient struct {
+	Id   openapi_types.UUID `json:"id"`
+	Name string             `json:"name"`
+
+	// PricedOn A date in the shop's own time, YYYY-MM-DD.
+	PricedOn *LocalDate `json:"pricedOn,omitempty"`
+
+	// Products How many products are this ingredient.
+	Products int  `json:"products"`
+	Unit     Unit `json:"unit"`
+
+	// UnitCostFils Fils per unit (per g, ml or piece), from the latest three purchase
+	// lines of its products that have a pack size, weighted by quantity.
+	// Missing until one is bought with a pack size known.
+	UnitCostFils *float64 `json:"unitCostFils,omitempty"`
+}
+
+// IngredientInput defines model for IngredientInput.
+type IngredientInput struct {
+	// Name What recipes call it, e.g. "Evaporated milk".
+	Name string `json:"name"`
+	Unit Unit   `json:"unit"`
+}
+
+// IngredientUsage defines model for IngredientUsage.
+type IngredientUsage struct {
+	// Bought How much was bought, in its unit.
+	Bought       float64            `json:"bought"`
+	IngredientId openapi_types.UUID `json:"ingredientId"`
+	Name         string             `json:"name"`
+	Unit         Unit               `json:"unit"`
+
+	// UnitCostFils Its price per unit now; missing while it has none.
+	UnitCostFils *float64 `json:"unitCostFils,omitempty"`
+
+	// Used How much sales used, by the recipes, in its unit.
+	Used float64 `json:"used"`
+}
+
 // Item defines model for Item.
 type Item struct {
 	CategoryId openapi_types.UUID `json:"categoryId"`
-	Id         openapi_types.UUID `json:"id"`
+
+	// CostFils What one costs the shop to make or buy, or null for not known.
+	// Admin only: tills never get it. A change applies to sales from
+	// now on, except an item's first cost, which applies to its earlier
+	// sales too, as they had none.
+	CostFils *int64 `json:"costFils"`
+
+	// CostFromRecipe Its cost comes from its recipe; a costFils sent is then ignored.
+	CostFromRecipe bool               `json:"costFromRecipe"`
+	Id             openapi_types.UUID `json:"id"`
 
 	// Kitchen Prints on the kitchen ticket.
 	Kitchen bool `json:"kitchen"`
@@ -262,6 +446,12 @@ type Item struct {
 type ItemInput struct {
 	CategoryId openapi_types.UUID `json:"categoryId"`
 
+	// CostFils What one costs the shop to make or buy, or null for not known.
+	// Admin only: tills never get it. A change applies to sales from
+	// now on, except an item's first cost, which applies to its earlier
+	// sales too, as they had none.
+	CostFils *int64 `json:"costFils"`
+
 	// Kitchen Prints on the kitchen ticket.
 	Kitchen bool `json:"kitchen"`
 
@@ -272,6 +462,32 @@ type ItemInput struct {
 	PriceFils        int64                `json:"priceFils"`
 }
 
+// ItemRecipe defines model for ItemRecipe.
+type ItemRecipe struct {
+	// CostFils What its recipe costs now; missing while an ingredient has no price.
+	CostFils *int64             `json:"costFils,omitempty"`
+	ItemId   openapi_types.UUID `json:"itemId"`
+	Lines    []RecipeLine       `json:"lines"`
+
+	// Missing The ingredients it uses that have no price yet.
+	Missing []string `json:"missing"`
+}
+
+// ItemSales defines model for ItemSales.
+type ItemSales struct {
+	// CostFils What they cost; missing when the item had no cost for some of these sales.
+	CostFils  *int64 `json:"costFils,omitempty"`
+	GrossFils int64  `json:"grossFils"`
+	ItemId    string `json:"itemId"`
+
+	// Name The name it last sold under.
+	Name string `json:"name"`
+	Qty  int    `json:"qty"`
+}
+
+// LocalDate A date in the shop's own time, YYYY-MM-DD.
+type LocalDate = string
+
 // Me defines model for Me.
 type Me struct {
 	Organization Organization `json:"organization"`
@@ -281,6 +497,14 @@ type Me struct {
 
 // Modifier defines model for Modifier.
 type Modifier struct {
+	// CostFils What it adds to the cost of the item, as an extra parotta does,
+	// or null for nothing known (counted as nothing). Applies as an
+	// item's cost does.
+	CostFils *int64 `json:"costFils"`
+
+	// CostFromRecipe Its cost comes from its recipe; a costFils sent is then ignored.
+	CostFromRecipe bool `json:"costFromRecipe"`
+
 	// Id Set to keep an existing modifier; left out for a new one.
 	Id openapi_types.UUID `json:"id"`
 
@@ -316,6 +540,11 @@ type ModifierGroupInput struct {
 
 // ModifierInput defines model for ModifierInput.
 type ModifierInput struct {
+	// CostFils What it adds to the cost of the item, as an extra parotta does,
+	// or null for nothing known (counted as nothing). Applies as an
+	// item's cost does.
+	CostFils *int64 `json:"costFils"`
+
 	// Id Set to keep an existing modifier; left out for a new one.
 	Id *openapi_types.UUID `json:"id,omitempty"`
 
@@ -326,6 +555,17 @@ type ModifierInput struct {
 
 	// PriceDeltaFils Added to the item's price.
 	PriceDeltaFils int64 `json:"priceDeltaFils"`
+}
+
+// ModifierRecipe defines model for ModifierRecipe.
+type ModifierRecipe struct {
+	// CostFils What its recipe costs now; missing while an ingredient has no price.
+	CostFils *int64       `json:"costFils,omitempty"`
+	Lines    []RecipeLine `json:"lines"`
+
+	// Missing The ingredients it uses that have no price yet.
+	Missing    []string           `json:"missing"`
+	ModifierId openapi_types.UUID `json:"modifierId"`
 }
 
 // Move defines model for Move.
@@ -417,6 +657,197 @@ type Ping struct {
 // PingStatus defines model for Ping.Status.
 type PingStatus string
 
+// Product defines model for Product.
+type Product struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area Area `json:"area"`
+
+	// Code The supplier's code for it, as on its invoices.
+	Code *string            `json:"code,omitempty"`
+	Id   openapi_types.UUID `json:"id"`
+
+	// IngredientId The ingredient it is, if it is one recipes use.
+	IngredientId *openapi_types.UUID `json:"ingredientId,omitempty"`
+
+	// LastCostEachFils What one cost in its latest purchase, as paid, VAT included.
+	LastCostEachFils *float64 `json:"lastCostEachFils,omitempty"`
+
+	// LastPurchasedOn A date in the shop's own time, YYYY-MM-DD.
+	LastPurchasedOn *LocalDate `json:"lastPurchasedOn,omitempty"`
+
+	// LastQuantity How many its latest purchase took.
+	LastQuantity *float64 `json:"lastQuantity,omitempty"`
+
+	// LastUnitPriceFils The unit price of its latest purchase.
+	LastUnitPriceFils *int64 `json:"lastUnitPriceFils,omitempty"`
+
+	// Name As the invoice names it, e.g. "Rainbow evaporated milk, 48 x 170 g".
+	Name string `json:"name"`
+
+	// PackAmount How much of its ingredient one holds, in the ingredient's unit, e.g. 8160 (g).
+	PackAmount *float64 `json:"packAmount,omitempty"`
+}
+
+// ProductInput defines model for ProductInput.
+type ProductInput struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area Area `json:"area"`
+
+	// Code The supplier's code; empty for none.
+	Code         *string             `json:"code,omitempty"`
+	IngredientId *openapi_types.UUID `json:"ingredientId"`
+	Name         string              `json:"name"`
+
+	// PackAmount Up to 3 decimals; null when not known, or with no ingredient.
+	PackAmount *float64 `json:"packAmount"`
+}
+
+// Purchase defines model for Purchase.
+type Purchase struct {
+	CreatedAt     time.Time `json:"createdAt"`
+	CreatedByName string    `json:"createdByName"`
+
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date            LocalDate          `json:"date"`
+	Id              openapi_types.UUID `json:"id"`
+	Lines           []PurchaseLine     `json:"lines"`
+	PricesBeforeVat bool               `json:"pricesBeforeVat"`
+	Reference       string             `json:"reference"`
+	ShopId          openapi_types.UUID `json:"shopId"`
+	Supplier        *Supplier          `json:"supplier,omitempty"`
+	TotalFils       int64              `json:"totalFils"`
+	UpdatedAt       *time.Time         `json:"updatedAt,omitempty"`
+	UpdatedByName   *string            `json:"updatedByName,omitempty"`
+
+	// VatFils The VAT in totalFils.
+	VatFils int64 `json:"vatFils"`
+}
+
+// PurchaseInput defines model for PurchaseInput.
+type PurchaseInput struct {
+	// Date A date in the shop's own time, YYYY-MM-DD.
+	Date  LocalDate           `json:"date"`
+	Lines []PurchaseLineInput `json:"lines"`
+
+	// PricesBeforeVat The unit prices are before VAT, as a wholesaler's invoice has them;
+	// each line's total is what was paid, VAT included.
+	PricesBeforeVat *bool `json:"pricesBeforeVat,omitempty"`
+
+	// Reference The invoice or receipt number.
+	Reference  *string             `json:"reference,omitempty"`
+	ShopId     openapi_types.UUID  `json:"shopId"`
+	SupplierId *openapi_types.UUID `json:"supplierId,omitempty"`
+
+	// SupplierName A supplier by name, added if it is new. Neither, for a one-off from anywhere.
+	SupplierName *string `json:"supplierName,omitempty"`
+}
+
+// PurchaseLine defines model for PurchaseLine.
+type PurchaseLine struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area          Area               `json:"area"`
+	ProductCode   *string            `json:"productCode,omitempty"`
+	ProductId     openapi_types.UUID `json:"productId"`
+	ProductName   string             `json:"productName"`
+	Quantity      float64            `json:"quantity"`
+	TotalFils     int64              `json:"totalFils"`
+	UnitPriceFils int64              `json:"unitPriceFils"`
+	VatFils       int64              `json:"vatFils"`
+}
+
+// PurchaseLineInput defines model for PurchaseLineInput.
+type PurchaseLineInput struct {
+	// Area Where a purchase goes: the counter (tea and drinks), the kitchen,
+	// packaging (cups, boxes, bags), or other.
+	Area Area `json:"area"`
+
+	// IngredientId The ingredient the product is, with packAmount: taken only if the
+	// product belongs to no ingredient yet, as a new one doesn't.
+	IngredientId *openapi_types.UUID `json:"ingredientId,omitempty"`
+
+	// PackAmount How much of the ingredient one holds, in its unit.
+	PackAmount *float64 `json:"packAmount,omitempty"`
+
+	// ProductCode The supplier's code for the product. A known code names its
+	// product before the name does; a new product keeps it.
+	ProductCode *string `json:"productCode,omitempty"`
+
+	// ProductId A known product; or leave it out and give productName.
+	ProductId *openapi_types.UUID `json:"productId,omitempty"`
+
+	// ProductName A product by name, added if it is new.
+	ProductName *string `json:"productName,omitempty"`
+
+	// Quantity Up to 3 decimals, e.g. 2, or 1.5 for kilos.
+	Quantity float64 `json:"quantity"`
+
+	// TotalFils The line's amount, as the invoice has it.
+	TotalFils     int64 `json:"totalFils"`
+	UnitPriceFils int64 `json:"unitPriceFils"`
+
+	// VatFils The VAT in totalFils, when the prices were before VAT.
+	VatFils *int64 `json:"vatFils,omitempty"`
+}
+
+// PurchaseList defines model for PurchaseList.
+type PurchaseList struct {
+	// Areas Every area, in order, with what was bought for it.
+	Areas []AreaSpend `json:"areas"`
+
+	// From A date in the shop's own time, YYYY-MM-DD.
+	From      LocalDate  `json:"from"`
+	Purchases []Purchase `json:"purchases"`
+
+	// SalesFils Sales less refunds in the same dates, by business day.
+	SalesFils int64 `json:"salesFils"`
+
+	// To A date in the shop's own time, YYYY-MM-DD.
+	To LocalDate `json:"to"`
+
+	// TotalFils All that was bought.
+	TotalFils int64 `json:"totalFils"`
+}
+
+// RecipeCost defines model for RecipeCost.
+type RecipeCost struct {
+	// CostFils What its recipe costs now; missing while an ingredient has no price.
+	CostFils *int64 `json:"costFils,omitempty"`
+
+	// Missing The ingredients it uses that have no price yet.
+	Missing []string `json:"missing"`
+}
+
+// RecipeInput defines model for RecipeInput.
+type RecipeInput struct {
+	Lines []RecipeLine `json:"lines"`
+}
+
+// RecipeLine defines model for RecipeLine.
+type RecipeLine struct {
+	// Amount Up to 3 decimals; below 0 only in an option's recipe.
+	Amount float64 `json:"amount"`
+
+	// BatchId Portions of a batch; not in a batch's own recipe.
+	BatchId *openapi_types.UUID `json:"batchId,omitempty"`
+
+	// IngredientId An ingredient, in its unit; or a batchId.
+	IngredientId *openapi_types.UUID `json:"ingredientId,omitempty"`
+}
+
+// Recipes defines model for Recipes.
+type Recipes struct {
+	Batches []Batch `json:"batches"`
+
+	// Items The items that have a recipe.
+	Items []ItemRecipe `json:"items"`
+
+	// Modifiers The options that have one.
+	Modifiers []ModifierRecipe `json:"modifiers"`
+}
+
 // RefundEvent defines model for RefundEvent.
 type RefundEvent struct {
 	ApprovedBy     openapi_types.UUID `json:"approvedBy"`
@@ -440,6 +871,58 @@ type RefundLineEvent struct {
 	Qty         int                `json:"qty"`
 }
 
+// SalesReport defines model for SalesReport.
+type SalesReport struct {
+	// Closes Each till's business days, latest first, with their cash counts.
+	Closes []DayClose `json:"closes"`
+
+	// Days Every date from `from` to `to`, days without sales too.
+	Days []DaySales `json:"days"`
+
+	// From A date in the shop's own time, YYYY-MM-DD.
+	From LocalDate `json:"from"`
+
+	// Hours All 24 hours of the clock, in the shop's time, over the whole range.
+	Hours []HourSales `json:"hours"`
+
+	// Items What sold, most taken first.
+	Items []ItemSales  `json:"items"`
+	Staff []StaffSales `json:"staff"`
+	Tills []TillSales  `json:"tills"`
+
+	// To A date in the shop's own time, YYYY-MM-DD.
+	To     LocalDate   `json:"to"`
+	Totals SalesTotals `json:"totals"`
+}
+
+// SalesTotals defines model for SalesTotals.
+type SalesTotals struct {
+	CardFils int64 `json:"cardFils"`
+	CashFils int64 `json:"cashFils"`
+
+	// CostFils What the sales with a known cost cost.
+	CostFils  int64 `json:"costFils"`
+	GrossFils int64 `json:"grossFils"`
+
+	// NetFils Sales less refunds.
+	NetFils int64 `json:"netFils"`
+
+	// Orders Completed orders; voided ones aren't sales.
+	Orders int `json:"orders"`
+
+	// ProfitFils Sales with a known cost, less their refunds, less what they cost.
+	// Sales of items without a cost aren't in it.
+	ProfitFils      int64 `json:"profitFils"`
+	Refunds         int   `json:"refunds"`
+	RefundsCashFils int64 `json:"refundsCashFils"`
+	RefundsFils     int64 `json:"refundsFils"`
+
+	// UncostedFils Sales of items without a cost, left out of the profit.
+	UncostedFils int64 `json:"uncostedFils"`
+	Voids        int   `json:"voids"`
+	VoidsFils    int64 `json:"voidsFils"`
+}
+
 // Shop defines model for Shop.
 type Shop struct {
 	Currency string             `json:"currency"`
@@ -450,8 +933,10 @@ type Shop struct {
 
 // SignIn defines model for SignIn.
 type SignIn struct {
-	Email    string `json:"email"`
 	Password string `json:"password"`
+
+	// Username Not case sensitive.
+	Username string `json:"username"`
 }
 
 // Staff defines model for Staff.
@@ -498,6 +983,40 @@ type StaffPinEvent struct {
 
 // StaffRole Managers also approve voids, refunds and closing the day on the till.
 type StaffRole string
+
+// StaffSales defines model for StaffSales.
+type StaffSales struct {
+	GrossFils int64              `json:"grossFils"`
+	Name      string             `json:"name"`
+	Orders    int                `json:"orders"`
+	StaffId   openapi_types.UUID `json:"staffId"`
+}
+
+// Supplier defines model for Supplier.
+type Supplier struct {
+	Id openapi_types.UUID `json:"id"`
+
+	// LastPurchasedOn A date in the shop's own time, YYYY-MM-DD.
+	LastPurchasedOn *LocalDate `json:"lastPurchasedOn,omitempty"`
+	Name            string     `json:"name"`
+
+	// QuietUntil A date in the shop's own time, YYYY-MM-DD.
+	QuietUntil *LocalDate `json:"quietUntil,omitempty"`
+
+	// UsualDays How many days apart its purchases usually are: the median gap of
+	// its last six purchase dates. Missing until it has two.
+	UsualDays *int `json:"usualDays,omitempty"`
+	Watched   bool `json:"watched"`
+}
+
+// SupplierInput defines model for SupplierInput.
+type SupplierInput struct {
+	// QuietUntil No warning through this date, YYYY-MM-DD; null for none.
+	QuietUntil *string `json:"quietUntil"`
+
+	// Watched Warn when its invoice is overdue. Off for an occasional supplier.
+	Watched bool `json:"watched"`
+}
 
 // SyncCategory defines model for SyncCategory.
 type SyncCategory struct {
@@ -596,12 +1115,50 @@ type TerminalPairing struct {
 	Terminal  Terminal  `json:"terminal"`
 }
 
+// TillSales defines model for TillSales.
+type TillSales struct {
+	Code        string             `json:"code"`
+	GrossFils   int64              `json:"grossFils"`
+	Name        string             `json:"name"`
+	NetFils     int64              `json:"netFils"`
+	Orders      int                `json:"orders"`
+	RefundsFils int64              `json:"refundsFils"`
+	TerminalId  openapi_types.UUID `json:"terminalId"`
+}
+
+// Unit defines model for Unit.
+type Unit string
+
+// Usage defines model for Usage.
+type Usage struct {
+	// BoughtFils What the purchases of sorted products with pack sizes cost.
+	BoughtFils int64 `json:"boughtFils"`
+
+	// From A date in the shop's own time, YYYY-MM-DD.
+	From LocalDate `json:"from"`
+
+	// Ingredients The ingredients bought or used, the largest difference in money first.
+	Ingredients []IngredientUsage `json:"ingredients"`
+
+	// To A date in the shop's own time, YYYY-MM-DD.
+	To LocalDate `json:"to"`
+
+	// UnrecipedFils Sales of items without a recipe, whose use is not in usedFils.
+	UnrecipedFils int64 `json:"unrecipedFils"`
+
+	// UnsortedFils Purchases of products without an ingredient or pack size, not in boughtFils.
+	UnsortedFils int64 `json:"unsortedFils"`
+
+	// UsedFils What sales used, by the recipes, at today's prices.
+	UsedFils int64 `json:"usedFils"`
+}
+
 // User defines model for User.
 type User struct {
-	Email string             `json:"email"`
-	Id    openapi_types.UUID `json:"id"`
-	Name  string             `json:"name"`
-	Role  UserRole           `json:"role"`
+	Id       openapi_types.UUID `json:"id"`
+	Name     string             `json:"name"`
+	Role     UserRole           `json:"role"`
+	Username string             `json:"username"`
 }
 
 // UserRole defines model for User.Role.
@@ -610,10 +1167,41 @@ type UserRole string
 // ID defines model for ID.
 type ID = openapi_types.UUID
 
+// ListPurchasesParams defines parameters for ListPurchases.
+type ListPurchasesParams struct {
+	From LocalDate `form:"from" json:"from"`
+	To   LocalDate `form:"to" json:"to"`
+
+	// ShopId One shop. Without it, every shop of the organization.
+	ShopId *openapi_types.UUID `form:"shopId,omitempty" json:"shopId,omitempty"`
+}
+
+// GetSalesReportParams defines parameters for GetSalesReport.
+type GetSalesReportParams struct {
+	From LocalDate `form:"from" json:"from"`
+	To   LocalDate `form:"to" json:"to"`
+
+	// ShopId One shop. Without it, every shop of the organization.
+	ShopId *openapi_types.UUID `form:"shopId,omitempty" json:"shopId,omitempty"`
+}
+
+// GetUsageParams defines parameters for GetUsage.
+type GetUsageParams struct {
+	From   LocalDate           `form:"from" json:"from"`
+	To     LocalDate           `form:"to" json:"to"`
+	ShopId *openapi_types.UUID `form:"shopId,omitempty" json:"shopId,omitempty"`
+}
+
 // GetChangesParams defines parameters for GetChanges.
 type GetChangesParams struct {
 	Since int64 `form:"since" json:"since"`
 }
+
+// CreateBatchJSONRequestBody defines body for CreateBatch for application/json ContentType.
+type CreateBatchJSONRequestBody = BatchInput
+
+// UpdateBatchJSONRequestBody defines body for UpdateBatch for application/json ContentType.
+type UpdateBatchJSONRequestBody = BatchInput
 
 // CreateCategoryJSONRequestBody defines body for CreateCategory for application/json ContentType.
 type CreateCategoryJSONRequestBody = CategoryInput
@@ -624,6 +1212,12 @@ type UpdateCategoryJSONRequestBody = CategoryInput
 // MoveCategoryJSONRequestBody defines body for MoveCategory for application/json ContentType.
 type MoveCategoryJSONRequestBody = Move
 
+// CreateIngredientJSONRequestBody defines body for CreateIngredient for application/json ContentType.
+type CreateIngredientJSONRequestBody = IngredientInput
+
+// UpdateIngredientJSONRequestBody defines body for UpdateIngredient for application/json ContentType.
+type UpdateIngredientJSONRequestBody = IngredientInput
+
 // CreateItemJSONRequestBody defines body for CreateItem for application/json ContentType.
 type CreateItemJSONRequestBody = ItemInput
 
@@ -632,6 +1226,9 @@ type UpdateItemJSONRequestBody = ItemInput
 
 // MoveItemJSONRequestBody defines body for MoveItem for application/json ContentType.
 type MoveItemJSONRequestBody = Move
+
+// SetItemRecipeJSONRequestBody defines body for SetItemRecipe for application/json ContentType.
+type SetItemRecipeJSONRequestBody = RecipeInput
 
 // CreateModifierGroupJSONRequestBody defines body for CreateModifierGroup for application/json ContentType.
 type CreateModifierGroupJSONRequestBody = ModifierGroupInput
@@ -642,6 +1239,18 @@ type UpdateModifierGroupJSONRequestBody = ModifierGroupInput
 // MoveModifierGroupJSONRequestBody defines body for MoveModifierGroup for application/json ContentType.
 type MoveModifierGroupJSONRequestBody = Move
 
+// SetModifierRecipeJSONRequestBody defines body for SetModifierRecipe for application/json ContentType.
+type SetModifierRecipeJSONRequestBody = RecipeInput
+
+// UpdateProductJSONRequestBody defines body for UpdateProduct for application/json ContentType.
+type UpdateProductJSONRequestBody = ProductInput
+
+// CreatePurchaseJSONRequestBody defines body for CreatePurchase for application/json ContentType.
+type CreatePurchaseJSONRequestBody = PurchaseInput
+
+// UpdatePurchaseJSONRequestBody defines body for UpdatePurchase for application/json ContentType.
+type UpdatePurchaseJSONRequestBody = PurchaseInput
+
 // SignInJSONRequestBody defines body for SignIn for application/json ContentType.
 type SignInJSONRequestBody = SignIn
 
@@ -650,6 +1259,9 @@ type CreateStaffJSONRequestBody = StaffInput
 
 // UpdateStaffJSONRequestBody defines body for UpdateStaff for application/json ContentType.
 type UpdateStaffJSONRequestBody = StaffInput
+
+// UpdateSupplierJSONRequestBody defines body for UpdateSupplier for application/json ContentType.
+type UpdateSupplierJSONRequestBody = SupplierInput
 
 // CreateTerminalJSONRequestBody defines body for CreateTerminal for application/json ContentType.
 type CreateTerminalJSONRequestBody = TerminalInput

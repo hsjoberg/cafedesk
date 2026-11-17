@@ -162,7 +162,7 @@ func TestPurchases(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := newClient(t, c.ts)
-	o.do("POST", "/v1/admin/session", api.SignIn{Email: "other@example.com", Password: ownerPassword}, nil)
+	o.do("POST", "/v1/admin/session", api.SignIn{Username: "other", Password: ownerPassword}, nil)
 	o.do("GET", "/v1/admin/products", nil, &products)
 	o.do("GET", "/v1/admin/purchases?from=2026-11-12&to=2026-11-13", nil, &list)
 	if len(products) != 0 || len(list.Purchases) != 0 {

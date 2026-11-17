@@ -60,10 +60,10 @@ func (s *Store) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
 type User struct {
 	ID     uuid.UUID
 	OrgID  uuid.UUID
-	Email  string
-	Name   string
-	Role   string // "owner" or "manager"
-	Active bool
+	Username string
+	Name     string
+	Role     string // "owner" or "manager"
+	Active   bool
 }
 
 // Org is an organization.
@@ -83,10 +83,10 @@ type Shop struct {
 // Setup creates the first organization, its first shop, and its owner. It
 // fails with ErrConflict if an organization already exists: it is for a
 // new server.
-func (s *Store) Setup(ctx context.Context, orgName, shopName, ownerName, email, passwordHash string) (Org, Shop, User, error) {
+func (s *Store) Setup(ctx context.Context, orgName, shopName, ownerName, username, passwordHash string) (Org, Shop, User, error) {
 	org := Org{ID: newID(), Name: strings.TrimSpace(orgName)}
 	shop := Shop{ID: newID(), Name: strings.TrimSpace(shopName), Currency: "AED", Timezone: "Asia/Dubai"}
-	user := User{ID: newID(), OrgID: org.ID, Email: normalEmail(email), Name: strings.TrimSpace(ownerName),
+	user := User{ID: newID(), OrgID: org.ID, Username: NormalUsername(username), Name: strings.TrimSpace(ownerName),
 		Role: "owner", Active: true}
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		var n int
@@ -103,14 +103,33 @@ func (s *Store) Setup(ctx context.Context, orgName, shopName, ownerName, email, 
 			shop.ID, org.ID, shop.Name, shop.Currency, shop.Timezone); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO users (id, org_id, email, name, role, password_hash)
-			VALUES ($1, $2, $3, $4, $5, $6)`, user.ID, org.ID, user.Email, user.Name, user.Role, passwordHash)
+		_, err := tx.Exec(ctx, `INSERT INTO users (id, org_id, username, name, role, password_hash)
+			VALUES ($1, $2, $3, $4, $5, $6)`, user.ID, org.ID, user.Username, user.Name, user.Role, passwordHash)
 		return err
 	})
 	return org, shop, user, err
 }
 
-func normalEmail(e string) string { return strings.ToLower(strings.TrimSpace(e)) }
+// NormalUsername is a username as it is stored: usernames are not case
+// sensitive.
+func NormalUsername(u string) string { return strings.ToLower(strings.TrimSpace(u)) }
+
+// ValidUsername reports whether a username, once normal, is 2 to 32 letters,
+// digits, dots, dashes or underscores, starting with a letter or digit.
+func ValidUsername(u string) bool {
+	if len(u) < 2 || len(u) > 32 {
+		return false
+	}
+	for i, c := range u {
+		switch {
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+		case i > 0 && (c == '.' || c == '-' || c == '_'):
+		default:
+			return false
+		}
+	}
+	return true
+}
 
 // IsSetUp reports whether the server has an organization yet.
 func (s *Store) IsSetUp(ctx context.Context) (bool, error) {
@@ -119,13 +138,13 @@ func (s *Store) IsSetUp(ctx context.Context) (bool, error) {
 	return done, err
 }
 
-// UserByEmail returns an active user and their password hash.
-func (s *Store) UserByEmail(ctx context.Context, email string) (User, string, error) {
+// UserByUsername returns an active user and their password hash.
+func (s *Store) UserByUsername(ctx context.Context, username string) (User, string, error) {
 	var u User
 	var hash string
-	err := s.pool.QueryRow(ctx, `SELECT id, org_id, email, name, role, active, password_hash FROM users
-		WHERE lower(email) = $1 AND active`, normalEmail(email)).
-		Scan(&u.ID, &u.OrgID, &u.Email, &u.Name, &u.Role, &u.Active, &hash)
+	err := s.pool.QueryRow(ctx, `SELECT id, org_id, username, name, role, active, password_hash FROM users
+		WHERE lower(username) = $1 AND active`, NormalUsername(username)).
+		Scan(&u.ID, &u.OrgID, &u.Username, &u.Name, &u.Role, &u.Active, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, "", ErrNotFound
 	}
@@ -146,10 +165,10 @@ func (s *Store) CreateSession(ctx context.Context, userID uuid.UUID, tokenHash [
 // that the session was used.
 func (s *Store) SessionUser(ctx context.Context, tokenHash []byte, now time.Time) (User, error) {
 	var u User
-	err := s.pool.QueryRow(ctx, `SELECT u.id, u.org_id, u.email, u.name, u.role, u.active
+	err := s.pool.QueryRow(ctx, `SELECT u.id, u.org_id, u.username, u.name, u.role, u.active
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = $1 AND s.expires_at > $2 AND u.active`, tokenHash, now).
-		Scan(&u.ID, &u.OrgID, &u.Email, &u.Name, &u.Role, &u.Active)
+		Scan(&u.ID, &u.OrgID, &u.Username, &u.Name, &u.Role, &u.Active)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, ErrNotFound
 	}

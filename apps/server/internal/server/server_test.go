@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	ownerEmail    = "owner@example.com"
+	ownerUsername = "owner"
 	ownerPassword = "correct horse battery"
 )
 
@@ -41,7 +41,7 @@ func newServer(t *testing.T) (*client, *store.Store, uuid.UUID) {
 	pool := testdb.New(t)
 	st := store.New(pool)
 	hash, _ := auth.HashPassword(ownerPassword)
-	org, _, _, err := st.Setup(context.Background(), "Cafedesk", "Downtown", "Owner", ownerEmail, hash)
+	org, _, _, err := st.Setup(context.Background(), "Cafedesk", "Downtown", "Owner", ownerUsername, hash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func (c *client) do(method, path string, body, out any, header ...string) int {
 
 func (c *client) signIn() {
 	c.t.Helper()
-	if code := c.do("POST", "/v1/admin/session", api.SignIn{Email: ownerEmail, Password: ownerPassword}, nil); code != 200 {
+	if code := c.do("POST", "/v1/admin/session", api.SignIn{Username: ownerUsername, Password: ownerPassword}, nil); code != 200 {
 		c.t.Fatalf("sign in: %d", code)
 	}
 }
@@ -112,19 +112,19 @@ func TestHealthAndPing(t *testing.T) {
 func TestSignInAndOut(t *testing.T) {
 	c, _, _ := newServer(t)
 	var e api.Error
-	if code := c.do("POST", "/v1/admin/session", api.SignIn{Email: ownerEmail, Password: "wrong password"}, &e); code != 401 {
+	if code := c.do("POST", "/v1/admin/session", api.SignIn{Username: ownerUsername, Password: "wrong password"}, &e); code != 401 {
 		t.Fatalf("wrong password: %d", code)
 	}
-	if code := c.do("POST", "/v1/admin/session", api.SignIn{Email: "nobody@example.com", Password: ownerPassword}, &e); code != 401 ||
-		e.Error.Message != "That email and password don't match." {
-		t.Fatalf("unknown email: %d %+v", code, e)
+	if code := c.do("POST", "/v1/admin/session", api.SignIn{Username: "nobody", Password: ownerPassword}, &e); code != 401 ||
+		e.Error.Message != "That username and password don't match." {
+		t.Fatalf("unknown username: %d %+v", code, e)
 	}
 	if code := c.do("GET", "/v1/admin/me", nil, nil); code != 401 {
 		t.Fatalf("me without a session: %d", code)
 	}
 
 	req, _ := http.NewRequest("POST", c.ts.URL+"/v1/admin/session",
-		strings.NewReader(`{"email":"OWNER@example.com","password":"`+ownerPassword+`"}`))
+		strings.NewReader(`{"username":" OWNER ","password":"`+ownerPassword+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil || resp.StatusCode != 200 {
@@ -172,7 +172,7 @@ func TestCookieOverLocalHTTP(t *testing.T) {
 		"example.com:8080":        true,
 	} {
 		req, _ := http.NewRequest("POST", plain.URL+"/v1/admin/session",
-			strings.NewReader(`{"email":"`+ownerEmail+`","password":"`+ownerPassword+`"}`))
+			strings.NewReader(`{"username":"`+ownerUsername+`","password":"`+ownerPassword+`"}`))
 		req.Header.Set("Content-Type", "application/json")
 		req.Host = host
 		resp, err := http.DefaultClient.Do(req)
@@ -192,10 +192,10 @@ func TestCookieOverLocalHTTP(t *testing.T) {
 func TestSignInRateLimit(t *testing.T) {
 	c, _, _ := newServer(t)
 	for i := 0; i < 10; i++ {
-		c.do("POST", "/v1/admin/session", api.SignIn{Email: ownerEmail, Password: "wrong password"}, nil)
+		c.do("POST", "/v1/admin/session", api.SignIn{Username: ownerUsername, Password: "wrong password"}, nil)
 	}
 	var e api.Error
-	if code := c.do("POST", "/v1/admin/session", api.SignIn{Email: ownerEmail, Password: ownerPassword}, &e); code != 429 {
+	if code := c.do("POST", "/v1/admin/session", api.SignIn{Username: ownerUsername, Password: ownerPassword}, &e); code != 429 {
 		t.Errorf("11th attempt: %d %+v", code, e)
 	}
 }
@@ -297,7 +297,7 @@ func TestOrganizationsDontMix(t *testing.T) {
 		t.Fatal(err)
 	}
 	c2 := newClient(t, c.ts)
-	if code := c2.do("POST", "/v1/admin/session", api.SignIn{Email: "other@example.com", Password: ownerPassword}, nil); code != 200 {
+	if code := c2.do("POST", "/v1/admin/session", api.SignIn{Username: "other", Password: ownerPassword}, nil); code != 200 {
 		t.Fatalf("sign in to the other organization: %d", code)
 	}
 	var cat api.Catalog

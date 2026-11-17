@@ -146,7 +146,7 @@ func TestSalesReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := newClient(t, c.ts)
-	other.do("POST", "/v1/admin/session", api.SignIn{Email: "other@example.com", Password: ownerPassword}, nil)
+	other.do("POST", "/v1/admin/session", api.SignIn{Username: "other", Password: ownerPassword}, nil)
 	if code := other.do("GET", "/v1/admin/reports/sales?from=2026-11-14&to=2026-11-15", nil, &rep); code != 200 ||
 		rep.Totals.Orders != 0 || len(rep.Closes) != 0 || len(rep.Tills) != 0 || len(rep.Staff) != 0 {
 		t.Errorf("another organization: %d %+v", code, rep)

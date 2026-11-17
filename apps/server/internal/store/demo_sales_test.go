@@ -15,7 +15,7 @@ import (
 // and counted but today, which is open, and nothing sold after now.
 func TestDemoSales(t *testing.T) {
 	st, org := setup(t)
-	owner, _, _ := st.UserByEmail(context.Background(), "owner@example.com")
+	owner, _, _ := st.UserByUsername(context.Background(), "owner")
 	ctx := context.Background()
 	if err := st.SeedDemoMenu(ctx, org); err != nil {
 		t.Fatal(err)

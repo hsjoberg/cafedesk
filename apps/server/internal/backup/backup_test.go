@@ -27,7 +27,7 @@ func filled(t *testing.T) *pgxpool.Pool {
 	ctx := context.Background()
 	pool := testdb.New(t)
 	st := store.New(pool)
-	org, shop, user, err := st.Setup(ctx, "Karak Corner", "Downtown", "Owner", "owner@example.com", "hash")
+	org, shop, user, err := st.Setup(ctx, "Karak Corner", "Downtown", "Owner", "owner", "hash")
 	if err != nil {
 		t.Fatal(err)
 	}

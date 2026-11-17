@@ -939,8 +939,10 @@ type Shop struct {
 
 // SignIn defines model for SignIn.
 type SignIn struct {
-	Email    string `json:"email"`
 	Password string `json:"password"`
+
+	// Username Not case sensitive.
+	Username string `json:"username"`
 }
 
 // Staff defines model for Staff.
@@ -1159,10 +1161,10 @@ type Usage struct {
 
 // User defines model for User.
 type User struct {
-	Email string             `json:"email"`
-	Id    openapi_types.UUID `json:"id"`
-	Name  string             `json:"name"`
-	Role  UserRole           `json:"role"`
+	Id       openapi_types.UUID `json:"id"`
+	Name     string             `json:"name"`
+	Role     UserRole           `json:"role"`
+	Username string             `json:"username"`
 }
 
 // UserRole defines model for User.Role.

@@ -5,7 +5,7 @@ import { setMe } from "../state";
 
 export function SignInPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = createSignal("");
+  const [username, setUsername] = createSignal("");
   const [password, setPassword] = createSignal("");
   const [error, setError] = createSignal("");
   const [busy, setBusy] = createSignal(false);
@@ -15,7 +15,7 @@ export function SignInPage() {
     setBusy(true);
     setError("");
     try {
-      setMe(await call(api.POST("/v1/admin/session", { body: { email: email(), password: password() } })));
+      setMe(await call(api.POST("/v1/admin/session", { body: { username: username(), password: password() } })));
       navigate("/sales", { replace: true });
     } catch (err) {
       setError((err as Error).message);
@@ -32,9 +32,9 @@ export function SignInPage() {
           <p class="muted">Sign in to manage your menu.</p>
         </div>
         <label class="field">
-          <span>Email</span>
-          <input class="input" type="email" autocomplete="username" required value={email()}
-            onInput={(e) => setEmail(e.currentTarget.value)} />
+          <span>Username</span>
+          <input class="input" type="text" autocomplete="username" autocapitalize="none" spellcheck={false} required
+            value={username()} onInput={(e) => setUsername(e.currentTarget.value)} />
         </label>
         <label class="field">
           <span>Password</span>
@@ -44,7 +44,7 @@ export function SignInPage() {
         <Show when={error()}>
           <p class="error" role="alert">{error()}</p>
         </Show>
-        <button type="submit" class="btn btn-ink" disabled={busy() || !email() || !password()}>
+        <button type="submit" class="btn btn-ink" disabled={busy() || !username() || !password()}>
           Sign in
         </button>
       </form>

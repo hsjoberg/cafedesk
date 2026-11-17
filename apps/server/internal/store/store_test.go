@@ -17,7 +17,7 @@ func setup(t *testing.T) (*store.Store, uuid.UUID) {
 	t.Helper()
 	pool := testdb.New(t)
 	st := store.New(pool)
-	org, _, _, err := st.Setup(context.Background(), "Test Org", "Test Shop", "Owner", "owner@example.com", "hash")
+	org, _, _, err := st.Setup(context.Background(), "Test Org", "Test Shop", "Owner", "owner", "hash")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,11 +34,11 @@ func TestMigrateTwice(t *testing.T) {
 
 func TestSetupOnce(t *testing.T) {
 	st, _ := setup(t)
-	_, _, _, err := st.Setup(context.Background(), "Other", "Shop", "Someone", "x@example.com", "hash")
+	_, _, _, err := st.Setup(context.Background(), "Other", "Shop", "Someone", "someone", "hash")
 	if !errors.Is(err, store.ErrConflict) {
 		t.Errorf("a second setup: %v", err)
 	}
-	u, hash, err := st.UserByEmail(context.Background(), "  OWNER@example.com ")
+	u, hash, err := st.UserByUsername(context.Background(), "  OWNER ")
 	if err != nil || u.Role != "owner" || hash != "hash" {
 		t.Errorf("owner %+v %q %v", u, hash, err)
 	}

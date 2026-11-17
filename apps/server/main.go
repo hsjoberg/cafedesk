@@ -278,12 +278,15 @@ func setup(args []string) error {
 	org := fs.String("org", "", "the organization's name, e.g. your company")
 	shop := fs.String("shop", "", "the first shop's name, e.g. its area")
 	name := fs.String("name", "", "the owner's name")
-	email := fs.String("email", "", "the owner's email, to sign in to the admin")
+	username := fs.String("username", "", "the owner's username, to sign in to the admin")
 	demo := fs.Bool("demo-menu", false, "start with the demo menu")
 	fs.Parse(args)
-	if *org == "" || *shop == "" || *name == "" || *email == "" || !strings.Contains(*email, "@") {
+	if *org == "" || *shop == "" || *name == "" || *username == "" {
 		fs.Usage()
-		return errors.New("give -org, -shop, -name and -email")
+		return errors.New("give -org, -shop, -name and -username")
+	}
+	if !store.ValidUsername(store.NormalUsername(*username)) {
+		return errors.New("a username is 2 to 32 letters, digits, dots, dashes or underscores, such as hampus")
 	}
 	// Everything that can fail without the password is checked before asking
 	// for it: the database, and whether the server is set up already.
@@ -306,7 +309,7 @@ func setup(args []string) error {
 	if err != nil {
 		return err
 	}
-	o, sh, _, err := st.Setup(ctx, *org, *shop, *name, *email, hash)
+	o, sh, _, err := st.Setup(ctx, *org, *shop, *name, *username, hash)
 	if errors.Is(err, store.ErrConflict) {
 		return errors.New("this server is already set up; setup is only for a new database")
 	}
@@ -318,7 +321,7 @@ func setup(args []string) error {
 			return fmt.Errorf("demo menu: %w", err)
 		}
 	}
-	fmt.Printf("Set up %s with the shop %s. Sign in to the admin as %s.\n", o.Name, sh.Name, *email)
+	fmt.Printf("Set up %s with the shop %s. Sign in to the admin as %s.\n", o.Name, sh.Name, store.NormalUsername(*username))
 	return nil
 }
 
@@ -362,8 +365,8 @@ then set DATABASE_URL to .../cafedesk_demo and run demo again`)
 	if err != nil {
 		return err
 	}
-	const email = "demo@cafedesk.test"
-	o, sh, owner, err := st.Setup(ctx, "Demo café", "Demo shop", "Demo owner", email, hash)
+	const username = "demo"
+	o, sh, owner, err := st.Setup(ctx, "Demo café", "Demo shop", "Demo owner", username, hash)
 	if err != nil {
 		return err
 	}
@@ -407,7 +410,7 @@ then set DATABASE_URL to .../cafedesk_demo and run demo again`)
 	fmt.Printf(`Set up %s with %d days of made-up sales and purchases.
 Sign in to the admin as %s with the password %s
 Starting PINs for a till: Ravi (manager) 5678, Anil 2468, Priya 1357.
-`, o.Name, *days, email, password)
+`, o.Name, *days, username, password)
 	return nil
 }
 
