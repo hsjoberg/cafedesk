@@ -190,8 +190,8 @@ func (a *app) receiptPrinterPanel(c *ui.Context) {
 			a.saveConfig()
 		})
 		if a.cfg.PlainReceipts {
-			ui.Text(c, "Receipts print in English only. The law asks for Arabic: turn this back on unless the printer "+
-				"can't print it.").FontSize(fsMeta).TextColor(colChili)
+			ui.Text(c, "Receipts print in English only. In the UAE the law asks for Arabic: there, turn this back on "+
+				"unless the printer can't print it.").FontSize(fsMeta).TextColor(colInkMuted)
 		}
 		if button(c, "test-receipt", "Print a test receipt", btnOption, a.settings.print.busy).Clicked() {
 			a.testPrint(roleReceipt)

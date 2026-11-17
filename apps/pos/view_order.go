@@ -222,7 +222,7 @@ func (a *app) emptyReceipt(c *ui.Context) {
 		ui.Text(c, "Order "+a.lastCode+" saved.").FontWeight(wMedium)
 		if a.lastChange > 0 {
 			ui.Text(c, "Change to give").FontSize(fsMeta).TextColor(colInkMuted).Margin(14, 0, 0, 0)
-			ui.Text(c, a.lastChange.AED()).FontSize(fsChange).FontWeight(wBold).FontFeatures("tnum")
+			ui.Text(c, a.lastChange.WithCode()).FontSize(fsChange).FontWeight(wBold).FontFeatures("tnum")
 		}
 		if a.printStatus != "" {
 			ui.Text(c, a.printStatus).FontSize(fsMeta).TextColor(colInkMuted).Margin(14, 0, 0, 0)
@@ -326,12 +326,12 @@ func (a *app) receiptFooter(c *ui.Context) {
 	ui.Row(c).AlignItems(ui.Baseline).Margin(4, 0, 16, 0).Children(func() {
 		ui.Text(c, "Total").FontSize(fsItem)
 		ui.Spacer(c)
-		amount := ui.Text(c, total.AED()).FontSize(fsTotal).FontWeight(wBold).FontFeatures("tnum")
+		amount := ui.Text(c, total.WithCode()).FontSize(fsTotal).FontWeight(wBold).FontFeatures("tnum")
 		if a.cart.Empty() {
 			amount.TextColor(colRule)
 		}
 	})
-	label := "Charge " + total.AED()
+	label := "Charge " + total.WithCode()
 	switch {
 	case a.sheet == sheetPay:
 		label = "Taking payment"

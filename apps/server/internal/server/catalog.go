@@ -12,8 +12,8 @@ import (
 
 const (
 	maxName   = 60
-	maxPrice  = 1_000_000 // fils: AED 10,000
-	maxDelta  = 100_000   // fils: AED 1,000 either way
+	maxPrice  = 1_000_000_000 // fils, or the smallest unit: AED 10 million, JPY 1 billion
+	maxDelta  = 100_000_000   // either way
 	maxGroups = 10
 	maxMods   = 30
 )

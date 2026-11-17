@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, For, Match, onMount, Show, Swit
 import { createStore } from "solid-js/store";
 import { api, call, type Category, type Item } from "../api/client";
 import { Tile } from "../components/Tile";
-import { formatFils, parseAmount } from "../money";
+import { currencyCode, formatFils, parseAmount, unit } from "../money";
 import { itemRecipeLines, loadRecipes, recipeText } from "../recipeText";
 import { catalog, catalogError, reloadCatalog } from "../state";
 import { DeleteButton, EditorHead, Field, fieldError, FormError, toSaveError, type SaveError } from "../ui";
@@ -92,7 +92,7 @@ export function MenuPage() {
       return item.savedCost === null
         ? "Only you see it, never the till. With it, Sales shows what this item makes."
         : "Empty, later sales of it show no profit. Earlier ones keep their cost.";
-    if (cost === null) return "In dirhams, like 0.45.";
+    if (cost === null) return `In ${currencyCode()}, like ${formatFils(Math.round(0.45 * unit()))}.`;
     const parts: string[] = [];
     if (price !== null && price > 0) {
       const profit = price - cost;
@@ -273,7 +273,7 @@ export function MenuPage() {
             <Field label="Arabic name" value={item.nameAr} rtl onInput={(v) => setItem("nameAr", v)}
               error={fieldError(error(), "nameAr")} />
             <Field label="Price" value={item.price} inputMode="decimal" placeholder="2.50"
-              onInput={(v) => setItem("price", v)} error={fieldError(error(), "priceFils")} hint="In dirhams" />
+              onInput={(v) => setItem("price", v)} error={fieldError(error(), "priceFils")} hint={`In ${currencyCode()}`} />
             <Show when={editedItem()?.costFromRecipe} fallback={
               <Field label="Cost to make or buy (optional)" value={item.cost} inputMode="decimal"
                 onInput={(v) => setItem("cost", v)} error={fieldError(error(), "costFils")} hint={costHint()} />

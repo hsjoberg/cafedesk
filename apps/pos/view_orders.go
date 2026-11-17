@@ -151,7 +151,7 @@ func (a *app) orderReceipt(c *ui.Context) {
 		})
 		dashedRule(c)
 		ui.Column(c).Gap(4).Children(func() {
-			pairRow(c, "Total", o.Total.AED(), true)
+			pairRow(c, "Total", o.Total.WithCode(), true)
 			if o.Method == payCash {
 				pairRow(c, "Cash", o.Tendered.String(), false)
 				pairRow(c, "Change", o.Change.String(), false)
@@ -160,7 +160,7 @@ func (a *app) orderReceipt(c *ui.Context) {
 			}
 		})
 		for _, r := range o.Refunds {
-			ui.Text(c, fmt.Sprintf("Refunded %s at %s, approved by %s: %s", r.Total.AED(), r.CreatedAt.Format("2 Jan 15:04"),
+			ui.Text(c, fmt.Sprintf("Refunded %s at %s, approved by %s: %s", r.Total.WithCode(), r.CreatedAt.Format("2 Jan 15:04"),
 				r.ApprovedBy, r.Reason)).FontSize(fsMeta).TextColor(colChili).Margin(6, 0, 0, 0)
 		}
 		busy := a.refund != nil || a.voiding != nil
@@ -238,7 +238,7 @@ func (a *app) refundSheet(c *ui.Context) {
 			if button(c, "refund-cancel", "Cancel", btnOption, r.saving).Width(160).Height(64).Clicked() {
 				a.refund = nil
 			}
-			label := "Refund " + total.AED()
+			label := "Refund " + total.WithCode()
 			if button(c, "refund-confirm", label, btnMoney, total == 0 || r.saving).Grow(1).Height(64).Clicked() {
 				a.confirmRefund()
 			}

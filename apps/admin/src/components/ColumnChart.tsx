@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { formatAmount } from "../money";
+import { currencyCode, formatAmount, unit } from "../money";
 
 export type Column = {
   /** For the tooltip and the screen reader: "Saturday 14 November". */
@@ -43,7 +43,7 @@ export function ColumnChart(props: { columns: Column[]; label: string }) {
     return Math.max(1, Math.ceil(room / (width() / Math.max(n(), 1))));
   };
   const axis = createMemo(() => {
-    const max = Math.max(...props.columns.map((c) => c.value), 1) / 100; // dirhams
+    const max = Math.max(...props.columns.map((c) => c.value), 1) / unit(); // whole units, such as dirhams
     const step = niceStep(max, 4);
     const top = Math.ceil(max / step) * step;
     const ticks: number[] = [];
@@ -51,7 +51,7 @@ export function ColumnChart(props: { columns: Column[]; label: string }) {
     const fmt = top >= 10_000 ? compact : whole;
     return { top, ticks: ticks.map((v) => ({ pct: (v / top) * 100, text: fmt.format(v) })) };
   });
-  const pct = (fils: number) => (fils / 100 / axis().top) * 100;
+  const pct = (fils: number) => (fils / unit() / axis().top) * 100;
   const n = () => props.columns.length;
   const tip = () => {
     const i = hover();
@@ -78,7 +78,7 @@ export function ColumnChart(props: { columns: Column[]; label: string }) {
               <div
                 class="chart-col"
                 tabindex="0"
-                aria-label={`${c.label}: ${formatAmount(c.value)} dirhams, ${c.detail}`}
+                aria-label={`${c.label}: ${currencyCode()} ${formatAmount(c.value)}, ${c.detail}`}
                 onPointerEnter={() => setHover(i())}
                 onFocus={() => setHover(i())}
                 onBlur={() => setHover(null)}
@@ -98,7 +98,7 @@ export function ColumnChart(props: { columns: Column[]; label: string }) {
               style={{ left: `${t().center}%`, bottom: `calc(${t().bottom}% + 10px)` }}
               aria-hidden="true"
             >
-              <strong>AED {formatAmount(t().c.value)}</strong>
+              <strong>{currencyCode()} {formatAmount(t().c.value)}</strong>
               <span>{t().c.label}</span>
               <span>{t().c.detail}</span>
             </div>

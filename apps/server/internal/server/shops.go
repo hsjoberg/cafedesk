@@ -1,6 +1,7 @@
 package server
 
 import (
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -8,6 +9,7 @@ import (
 
 	"cafedesk/apps/server/internal/api"
 	"cafedesk/apps/server/internal/store"
+	"cafedesk/pkg/money"
 )
 
 func (s *Server) UpdateShop(w http.ResponseWriter, r *http.Request, id api.ID) {
@@ -17,6 +19,10 @@ func (s *Server) UpdateShop(w http.ResponseWriter, r *http.Request, id api.ID) {
 	}
 	if strings.TrimSpace(in.Name) == "" {
 		invalid(w, "name", "Give the shop a name.")
+		return
+	}
+	if !ValidTimezone(in.Timezone) {
+		invalid(w, "timezone", "Choose a time zone, such as Asia/Dubai.")
 		return
 	}
 	for _, f := range []struct {
@@ -42,6 +48,48 @@ func (s *Server) UpdateShop(w http.ResponseWriter, r *http.Request, id api.ID) {
 		return
 	}
 	writeJSON(w, http.StatusOK, store.APIShop(sh))
+}
+
+// ValidTimezone reports whether tz names a time zone, such as Asia/Dubai.
+func ValidTimezone(tz string) bool {
+	tz = strings.TrimSpace(tz)
+	if tz == "" || tz == "Local" {
+		return false
+	}
+	_, err := time.LoadLocation(tz)
+	return err == nil
+}
+
+func (s *Server) UpdateOrganization(w http.ResponseWriter, r *http.Request) {
+	var in api.OrganizationInput
+	if !readJSON(w, r, &in) {
+		return
+	}
+	switch {
+	case strings.TrimSpace(in.Name) == "":
+		invalid(w, "name", "Give the business a name.")
+		return
+	case utf8.RuneCountInString(in.Name) > 80:
+		invalid(w, "name", "The name is too long.")
+		return
+	case !in.Country.Valid():
+		invalid(w, "country", "Choose the UAE or another country.")
+		return
+	case in.VatPercent < 0 || in.VatPercent > 50 || math.IsNaN(in.VatPercent):
+		invalid(w, "vatPercent", "The VAT is a percentage from 0 to 50.")
+		return
+	}
+	if _, ok := money.LookupCurrency(in.Currency); !ok {
+		invalid(w, "currency", "Choose a currency from the list.")
+		return
+	}
+	in.VatPercent = math.Round(in.VatPercent*100) / 100
+	o, err := s.store.UpdateOrg(r.Context(), user(r).OrgID, in)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, store.APIOrg(o))
 }
 
 func (s *Server) GetVatStatus(w http.ResponseWriter, r *http.Request) {

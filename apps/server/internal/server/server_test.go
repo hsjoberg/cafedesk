@@ -36,12 +36,15 @@ type client struct {
 
 // newServer runs the server over TLS on a fresh database with one
 // organization, and returns a client with no session yet.
+// uae is a business in the UAE, in dirhams.
+var uae = store.Settings{Currency: "AED", Country: store.CountryUAE, Timezone: "Asia/Dubai"}
+
 func newServer(t *testing.T) (*client, *store.Store, uuid.UUID) {
 	t.Helper()
 	pool := testdb.New(t)
 	st := store.New(pool)
 	hash, _ := auth.HashPassword(ownerPassword)
-	org, _, _, err := st.Setup(context.Background(), "Cafedesk", "Downtown", "Owner", ownerUsername, hash)
+	org, _, _, err := st.Setup(context.Background(), "Cafedesk", "Downtown", "Owner", ownerUsername, hash, uae)
 	if err != nil {
 		t.Fatal(err)
 	}

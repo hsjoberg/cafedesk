@@ -104,7 +104,7 @@ func (r Receipt) Image(dots int) *image.Gray {
 			paperItem(c, l.Qty, l.Item.Name, l.Item.NameAR, l.Total().String(), l.Mods)
 		}
 		paperRule(c)
-		biPair(c, "Total", arTotal, r.Total.AED(), dotsTotal, true)
+		biPair(c, "Total", arTotal, r.Total.WithCode(), dotsTotal, true)
 		if r.Method == payCash {
 			biPair(c, "Cash", arCash, r.Tendered.String(), dotsBody, false)
 			biPair(c, "Change", arChange, r.Change.String(), dotsBody, false)
@@ -139,9 +139,9 @@ func refundImage(o Order, r Refund, cfg Config, dots int) *image.Gray {
 		}
 		paperRule(c)
 		if r.Method == payCard {
-			biPair(c, "Back to the card", arToCard, r.Total.AED(), dotsTotal, true)
+			biPair(c, "Back to the card", arToCard, r.Total.WithCode(), dotsTotal, true)
 		} else {
-			biPair(c, "Cash back", arCashBack, r.Total.AED(), dotsTotal, true)
+			biPair(c, "Cash back", arCashBack, r.Total.WithCode(), dotsTotal, true)
 		}
 	})
 }

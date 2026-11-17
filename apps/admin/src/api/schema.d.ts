@@ -73,6 +73,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Changes the business's name and settings: its currency, which can
+         *     change only while it has no sales or purchases, the country whose
+         *     rules apply, and the VAT on purchases.
+         */
+        put: operations["updateOrganization"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/catalog": {
         parameters: {
             query?: never;
@@ -334,9 +355,10 @@ export interface paths {
         };
         get?: never;
         /**
-         * Changes a shop's name and the business details its receipts print:
-         *     the trade name and address, in English and Arabic, the phone number
-         *     and the licence number. The tills get them when they next sync.
+         * Changes a shop's name, its time zone, and the business details its
+         *     receipts print: the trade name and address, in English and Arabic,
+         *     the phone number and the licence number. The tills get them when
+         *     they next sync.
          */
         put: operations["updateShop"];
         post?: never;
@@ -354,8 +376,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The organization's sales over the last 12 months against the UAE's
-         *     VAT registration thresholds, for a business not yet registered.
+         * The organization's sales over the last 12 months against the VAT
+         *     registration thresholds of its country, for a business not yet
+         *     registered. Only the UAE's are known: elsewhere `applies` is false.
          */
         get: operations["getVatStatus"];
         put?: never;
@@ -749,6 +772,8 @@ export interface components {
             password: string;
         };
         Me: {
+            /** @description The currencies a business can choose. */
+            currencies: components["schemas"]["Currency"][];
             user: components["schemas"]["User"];
             organization: components["schemas"]["Organization"];
             shops: components["schemas"]["Shop"][];
@@ -765,13 +790,46 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /** @description The ISO 4217 code of the currency every amount is in, such as AED. */
+            currency: string;
+            /** @description How many decimals the currency's amounts have; 10 to this power of the smallest unit make one. */
+            currencyDecimals: number;
+            country: components["schemas"]["Country"];
+            /**
+             * Format: double
+             * @description The VAT a supplier adds to prices before VAT, as a percentage; 0 for none.
+             */
+            vatPercent: number;
+        };
+        OrganizationInput: {
+            name: string;
+            /** @description An ISO 4217 code the server knows. It can change only while there are no sales or purchases. */
+            currency: string;
+            country: components["schemas"]["Country"];
+            /**
+             * Format: double
+             * @description From 0 to 50.
+             */
+            vatPercent: number;
+        };
+        /**
+         * @description The country whose rules the admin follows: AE for the UAE (the VAT
+         *     registration thresholds, and receipts in Arabic as its consumer
+         *     protection law asks), or empty for another, with no rules of its own.
+         * @enum {string}
+         */
+        Country: "AE" | "";
+        Currency: {
+            /** @description ISO 4217, such as AED. */
+            code: string;
+            decimals: number;
         };
         Shop: {
             /** Format: uuid */
             id: string;
             /** @description What the shop is called in the admin and on its tills, such as its area. */
             name: string;
-            currency: string;
+            /** @description An IANA time zone, such as Asia/Dubai. Reports count hours in it. */
             timezone: string;
             /** @description The business's name as on its trade licence, printed at the top of receipts. */
             tradeName: string;
@@ -786,6 +844,8 @@ export interface components {
         };
         ShopInput: {
             name: string;
+            /** @description An IANA time zone, such as Asia/Dubai. */
+            timezone: string;
             /** @description The business's name as on its trade licence, printed at the top of receipts. */
             tradeName: string;
             /** @description The trade name in Arabic, as on the licence. */
@@ -811,6 +871,8 @@ export interface components {
             licenceNumber: string;
         };
         VatStatus: {
+            /** @description The business's country has thresholds the server knows, in its currency. When not, the rest is zero. */
+            applies: boolean;
             from: components["schemas"]["LocalDate"];
             to: components["schemas"]["LocalDate"];
             /**
@@ -820,12 +882,12 @@ export interface components {
             salesFils: number;
             /**
              * Format: int64
-             * @description Above this over 12 months, registering for VAT is required (AED 375,000).
+             * @description Above this over 12 months, registering for VAT is required (in the UAE, AED 375,000).
              */
             mandatoryFils: number;
             /**
              * Format: int64
-             * @description Above this, registering is allowed (AED 187,500).
+             * @description Above this, registering is allowed (in the UAE, AED 187,500).
              */
             voluntaryFils: number;
             /** @description A shop of the organization is registered for VAT. */
@@ -1528,6 +1590,7 @@ export interface components {
             modifierGroups: components["schemas"]["SyncModifierGroup"][];
             staff: components["schemas"]["SyncStaff"][];
             shop: components["schemas"]["ReceiptHeader"];
+            currency: components["schemas"]["Currency"];
         };
         SyncCategory: {
             /** Format: uuid */
@@ -1885,6 +1948,32 @@ export interface operations {
                 };
             };
             401: components["responses"]["Error"];
+        };
+    };
+    updateOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationInput"];
+            };
+        };
+        responses: {
+            /** @description The organization as it now is. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            400: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     getCatalog: {

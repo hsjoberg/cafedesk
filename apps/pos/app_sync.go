@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"cafedesk/pkg/money"
+
 	"github.com/egoist/mygo"
 )
 
@@ -137,6 +139,7 @@ func (a *app) pair(code string) {
 			a.cfg.TerminalCode = pairing.Terminal.Code
 			a.cfg.ShopLabel = pairing.Shop.Name
 			a.saveConfig()
+			a.useCurrency(money.Currency{Code: pairing.Organization.Currency, Decimals: pairing.Organization.CurrencyDecimals})
 			a.sync = syncState{}
 			if first {
 				a.synced = false
@@ -181,6 +184,7 @@ func (a *app) syncNow() {
 type syncResult struct {
 	catalog  *Catalog       // the menu, when it changed
 	header   *ReceiptHeader // the shop's details for receipts, as the admin has them
+	currency money.Currency // the business's, as the admin has it; empty if not sent
 	applied  bool           // the server's changes were saved
 	err      error
 	rejected string
@@ -207,6 +211,7 @@ func runSync(ctx context.Context, c *syncClient, st *Store) (res syncResult) {
 	}
 	res.header = &ReceiptHeader{TradeName: ch.Shop.TradeName, TradeNameAr: ch.Shop.TradeNameAr, Address: ch.Shop.Address,
 		AddressAr: ch.Shop.AddressAr, Phone: ch.Shop.Phone, LicenceNumber: ch.Shop.LicenceNumber}
+	res.currency = money.Currency{Code: ch.Currency.Code, Decimals: ch.Currency.Decimals}
 	if ch.Version != since || ch.Full {
 		if err := st.ApplyChanges(ctx, ch); err != nil {
 			res.err = fmt.Errorf("save the menu from the admin: %w", err)
@@ -273,6 +278,18 @@ func (a *app) syncDone(res syncResult) {
 		a.cfg.Header = *res.header
 		a.saveConfig()
 	}
+	a.useCurrency(res.currency)
+}
+
+// useCurrency counts in the business's currency, from the admin, and keeps
+// it for the next start. One the till doesn't know is left alone.
+func (a *app) useCurrency(c money.Currency) {
+	if _, ok := money.LookupCurrency(c.Code); !ok || c == a.cfg.Currency {
+		return
+	}
+	a.cfg.Currency = c
+	money.Use(a.cfg.currency())
+	a.saveConfig()
 }
 
 // syncSummary says, in a sentence, how the till stands with the admin.

@@ -41,7 +41,7 @@ func (a *app) noDayPanel(c *ui.Context) {
 	ui.Column(c).Background(colTile).Radius(10).Padding(24).Gap(8).Children(func() {
 		ui.Text(c, "No day is open").FontSize(fsItem).FontWeight(wMedium)
 		ui.Text(c, "The next sale starts one, with what the last day left in the drawer:").TextColor(colInkMuted)
-		ui.Text(c, a.carry.AED()).FontSize(fsTotal).FontWeight(wBold).FontFeatures("tnum")
+		ui.Text(c, a.carry.WithCode()).FontSize(fsTotal).FontWeight(wBold).FontFeatures("tnum")
 		if a.dayErr != "" {
 			ui.Text(c, a.dayErr).TextColor(colChili)
 		}
@@ -53,7 +53,7 @@ func (a *app) closePanel(c *ui.Context, r DayReport) {
 		ui.Row(c).Gap(24).Grow(1).AlignItems(ui.Stretch).Children(func() {
 			ui.Column(c).Grow(1).Gap(6).Children(func() {
 				ui.Text(c, "Net sales so far").FontSize(fsMeta).TextColor(colInkMuted)
-				ui.Text(c, r.Net().AED()).FontSize(fsTotal).FontWeight(wBold).FontFeatures("tnum")
+				ui.Text(c, r.Net().WithCode()).FontSize(fsTotal).FontWeight(wBold).FontFeatures("tnum")
 				ui.Textf(c, "%d orders since %s", r.Orders, r.Day.OpenedAt.Format("15:04")).TextColor(colInkMuted)
 				if end, ok := dayEndAfter(r.Day.OpenedAt, a.cfg.dayEnds()); ok {
 					ui.Textf(c, "If it's still open at %s, the day closes by itself, without a count.", end.Format("15:04")).
@@ -114,7 +114,7 @@ func (a *app) reportStrip(c *ui.Context) {
 				pairRow(c, fmt.Sprintf("    Cash, %d", r.CashOrders), r.Cash.String(), false)
 				pairRow(c, fmt.Sprintf("    Card, %d", r.CardOrders), r.Card.String(), false)
 				pairRow(c, fmt.Sprintf("Refunds, %d", r.RefundCount), minus(r.Refunds()), false)
-				pairRow(c, "Net sales", r.Net().AED(), true)
+				pairRow(c, "Net sales", r.Net().WithCode(), true)
 				pairRow(c, fmt.Sprintf("Voided, %d orders", r.VoidCount), r.VoidTotal.String(), false)
 				dashedRule(c)
 				pairRow(c, "In the drawer at the start", r.Day.OpeningFloat.String(), false)
@@ -191,9 +191,9 @@ func (a *app) cashMovePanel(c *ui.Context) {
 			if button(c, "move-cancel", "Cancel", btnOption, m.saving).Grow(1).Clicked() {
 				a.cashMove = nil
 			}
-			label := "Put in " + m.amount.value().AED()
+			label := "Put in " + m.amount.value().WithCode()
 			if m.out {
-				label = "Take out " + m.amount.value().AED()
+				label = "Take out " + m.amount.value().WithCode()
 			}
 			if button(c, "move-save", label, btnInk, m.saving).Grow(2).Height(64).Clicked() {
 				a.saveCashMove()

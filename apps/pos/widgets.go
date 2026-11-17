@@ -4,6 +4,8 @@ import (
 	"math"
 	"time"
 
+	"cafedesk/pkg/money"
+
 	"github.com/egoist/mygo/ui"
 )
 
@@ -145,7 +147,8 @@ func amountPad(c *ui.Context, prefix string, e *amountEntry, disabled bool) ui.E
 		MaxHeight(4*80 + 24).AlignSelf(ui.End).
 		Children(func() {
 			for _, k := range keys {
-				b := button(c, prefix+k.key, k.label, btnKey, disabled)
+				// A currency without decimals, such as the yen, has no point.
+				b := button(c, prefix+k.key, k.label, btnKey, disabled || k.key == "." && money.Current().Decimals == 0)
 				if k.key == "back" {
 					b.PaddingX(4)
 				}

@@ -13,11 +13,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// uae is a business in the UAE, in dirhams.
+var uae = store.Settings{Currency: "AED", Country: store.CountryUAE, Timezone: "Asia/Dubai"}
+
 func setup(t *testing.T) (*store.Store, uuid.UUID) {
 	t.Helper()
 	pool := testdb.New(t)
 	st := store.New(pool)
-	org, _, _, err := st.Setup(context.Background(), "Test Org", "Test Shop", "Owner", "owner", "hash")
+	org, _, _, err := st.Setup(context.Background(), "Test Org", "Test Shop", "Owner", "owner", "hash", uae)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +37,7 @@ func TestMigrateTwice(t *testing.T) {
 
 func TestSetupOnce(t *testing.T) {
 	st, _ := setup(t)
-	_, _, _, err := st.Setup(context.Background(), "Other", "Shop", "Someone", "someone", "hash")
+	_, _, _, err := st.Setup(context.Background(), "Other", "Shop", "Someone", "someone", "hash", uae)
 	if !errors.Is(err, store.ErrConflict) {
 		t.Errorf("a second setup: %v", err)
 	}

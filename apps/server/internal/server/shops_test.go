@@ -21,7 +21,7 @@ func TestShopDetails(t *testing.T) {
 		t.Errorf("a new shop has details: %+v", shop)
 	}
 
-	in := api.ShopInput{Name: " Downtown ", TradeName: "Karak Corner Cafeteria", TradeNameAr: "كافتيريا ركن الكرك",
+	in := api.ShopInput{Name: " Downtown ", Timezone: "Asia/Dubai", TradeName: "Karak Corner Cafeteria", TradeNameAr: "كافتيريا ركن الكرك",
 		Address: "Shop 3, Downtown, Dubai", AddressAr: "محل 3، وسط المدينة، دبي", Phone: "04 123 4567", LicenceNumber: "1234567"}
 	var got api.Shop
 	if code := c.do("PUT", "/v1/admin/shops/"+shop.Id.String(), in, &got); code != 200 ||
@@ -57,6 +57,74 @@ func TestShopDetails(t *testing.T) {
 	if code := c.do("PUT", "/v1/admin/shops/"+uuid.NewString(), in, &e); code != 404 {
 		t.Errorf("no such shop: %d", code)
 	}
+	// The time zone, which the reports count hours in.
+	tz := in
+	tz.Timezone = "Mars/Olympus"
+	if code := c.do("PUT", "/v1/admin/shops/"+shop.Id.String(), tz, &e); code != 400 || e.Error.Field == nil ||
+		*e.Error.Field != "timezone" {
+		t.Errorf("no such time zone: %d %+v", code, e)
+	}
+	tz.Timezone = "Europe/London"
+	if code := c.do("PUT", "/v1/admin/shops/"+shop.Id.String(), tz, &got); code != 200 || got.Timezone != "Europe/London" {
+		t.Errorf("time zone: %d %+v", code, got)
+	}
+}
+
+// The business's currency, country and VAT on purchases.
+func TestBusinessSettings(t *testing.T) {
+	c, _, _ := newServer(t)
+	c.signIn()
+	var me api.Me
+	c.do("GET", "/v1/admin/me", nil, &me)
+	if o := me.Organization; o.Currency != "AED" || o.CurrencyDecimals != 2 || o.Country != api.AE || o.VatPercent != 5 {
+		t.Fatalf("a UAE business: %+v", o)
+	}
+
+	var e api.Error
+	for field, in := range map[string]api.OrganizationInput{
+		"name":       {Name: " ", Currency: "AED", Country: api.AE},
+		"currency":   {Name: "Cafedesk", Currency: "XYZ", Country: api.AE},
+		"country":    {Name: "Cafedesk", Currency: "AED", Country: "SE"},
+		"vatPercent": {Name: "Cafedesk", Currency: "AED", Country: api.AE, VatPercent: 60},
+	} {
+		if code := c.do("PUT", "/v1/admin/organization", in, &e); code != 400 || e.Error.Field == nil || *e.Error.Field != field {
+			t.Errorf("a wrong %s: %d %+v", field, code, e)
+		}
+	}
+
+	// With nothing priced or sold yet, the currency can change.
+	var o api.Organization
+	if code := c.do("PUT", "/v1/admin/organization", api.OrganizationInput{Name: "Karak Corner", Currency: "kwd",
+		Country: "", VatPercent: 0}, &o); code != 200 || o.Currency != "KWD" || o.CurrencyDecimals != 3 || o.Country != "" ||
+		o.Name != "Karak Corner" {
+		t.Fatalf("to dinars: %d %+v", code, o)
+	}
+	var vat api.VatStatus
+	if c.do("GET", "/v1/admin/reports/vat", nil, &vat); vat.Applies {
+		t.Errorf("UAE thresholds outside the UAE: %+v", vat)
+	}
+
+	// The tills learn the currency when they pair, and with every sync.
+	_, token, _, _ := tillSetup(t, c)
+	var ch api.Changes
+	newClient(t, c.ts).do("GET", "/v1/terminal/changes?since=0", nil, &ch, bearer(token)...)
+	if ch.Currency.Code != "KWD" || ch.Currency.Decimals != 3 {
+		t.Errorf("changes: %+v", ch.Currency)
+	}
+
+	// With an item priced in it, it can't.
+	if code := c.do("PUT", "/v1/admin/organization", api.OrganizationInput{Name: "Karak Corner", Currency: "USD",
+		Country: ""}, &e); code != 409 {
+		t.Errorf("a currency in use changed: %d %+v", code, e)
+	}
+	if code := c.do("PUT", "/v1/admin/organization", api.OrganizationInput{Name: "Karak Corner", Currency: "KWD",
+		Country: api.AE, VatPercent: 5}, &o); code != 200 || o.Country != api.AE {
+		t.Errorf("the country: %d %+v", code, o)
+	}
+	// The UAE's thresholds are in dirhams.
+	if c.do("GET", "/v1/admin/reports/vat", nil, &vat); vat.Applies {
+		t.Errorf("UAE thresholds in dinars: %+v", vat)
+	}
 }
 
 func TestVatStatus(t *testing.T) {
@@ -64,7 +132,7 @@ func TestVatStatus(t *testing.T) {
 	_, token, manager, _ := tillSetup(t, c)
 	till := newClient(t, c.ts)
 	var st api.VatStatus
-	if code := c.do("GET", "/v1/admin/reports/vat", nil, &st); code != 200 || st.SalesFils != 0 ||
+	if code := c.do("GET", "/v1/admin/reports/vat", nil, &st); code != 200 || !st.Applies || st.SalesFils != 0 ||
 		st.MandatoryFils != 37_500_000 || st.VoluntaryFils != 18_750_000 || st.Registered {
 		t.Fatalf("empty: %d %+v", code, st)
 	}

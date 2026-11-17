@@ -5,7 +5,7 @@ import { ColumnChart, type Column } from "../components/ColumnChart";
 import { OverdueInvoices } from "../components/Overdue";
 import { VatNotice } from "../components/VatNotice";
 import { daysBetween, isDate, longDate, presets, rangeLabel, shortDate, todayIn } from "../dates";
-import { formatAmount } from "../money";
+import { currencyCode, formatAmount } from "../money";
 import { me } from "../state";
 
 const hourName = (h: number) =>
@@ -430,7 +430,7 @@ export function SalesPage() {
               </p>
               <p class="slip-label">Net sales</p>
               <p class="hero">
-                <span class="cur">AED</span> {formatAmount(r().totals.netFils)}
+                <span class="cur">{currencyCode()}</span> {formatAmount(r().totals.netFils)}
               </p>
               <p class="meta">
                 {orders(r().totals.orders)}

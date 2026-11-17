@@ -20,9 +20,13 @@ func (s *Store) Changes(ctx context.Context, t Terminal, since int64) (api.Chang
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		// Read the version first, in the transaction: rows changed after it
 		// come next time, never not at all.
-		if err := tx.QueryRow(ctx, "SELECT catalog_version FROM organizations WHERE id = $1", t.OrgID).Scan(&ch.Version); err != nil {
+		var cur string
+		if err := tx.QueryRow(ctx, "SELECT catalog_version, currency FROM organizations WHERE id = $1", t.OrgID).
+			Scan(&ch.Version, &cur); err != nil {
 			return err
 		}
+		c := currencyOf(cur)
+		ch.Currency = api.Currency{Code: c.Code, Decimals: c.Decimals}
 		// The receipt's header goes with every answer: it is small, and a
 		// till then never prints an old address.
 		var err error

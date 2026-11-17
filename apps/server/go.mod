@@ -3,6 +3,7 @@ module cafedesk/apps/server
 go 1.27.4
 
 require (
+	cafedesk/pkg v0.0.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/minio/minio-go/v7 v7.4.1
@@ -50,3 +51,5 @@ require (
 )
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+
+replace cafedesk/pkg => ../../pkg

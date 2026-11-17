@@ -169,9 +169,14 @@ func (s *Store) Pair(ctx context.Context, codeHash, tokenHash []byte, now time.T
 		if err != nil {
 			return err
 		}
-		return tx.QueryRow(ctx, `SELECT o.id, o.name, sh.id, sh.name, sh.currency, sh.timezone
+		var o Org
+		if err := tx.QueryRow(ctx, `SELECT o.id, o.name, o.currency, o.country, o.vat_percent::float8, sh.id, sh.name, sh.timezone
 			FROM terminals t JOIN organizations o ON o.id = t.org_id JOIN shops sh ON sh.id = t.shop_id WHERE t.id = $1`, id).
-			Scan(&p.Organization.Id, &p.Organization.Name, &p.Shop.Id, &p.Shop.Name, &p.Shop.Currency, &p.Shop.Timezone)
+			Scan(&o.ID, &o.Name, &o.Currency, &o.Country, &o.VatPercent, &p.Shop.Id, &p.Shop.Name, &p.Shop.Timezone); err != nil {
+			return err
+		}
+		p.Organization = APIOrg(o)
+		return nil
 	})
 	return p, err
 }

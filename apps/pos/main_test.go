@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -96,7 +97,7 @@ func openTill(t *testing.T, a *app) {
 	}
 	st.MustChangePIN = false
 	a.signIn(st)
-	a.float.set(money.FromDirhams(100))
+	a.float.set(money.FromMajor(100))
 	a.startDay()
 	if a.day == nil {
 		t.Fatalf("day not started: %s", a.dayErr)
@@ -326,7 +327,7 @@ func TestRefund(t *testing.T) {
 	a.addItem(karak)
 	a.addItem(karak)
 	a.startPayment()
-	a.tendered.set(money.FromDirhams(5))
+	a.tendered.set(money.FromMajor(5))
 	a.completeSale()
 
 	tt := ui.NewTester(a.view, 1366, 768)
@@ -361,7 +362,7 @@ func TestCloseDay(t *testing.T) {
 	openTill(t, a)
 	a.addItem(a.catalog.ItemsIn("meals")[0])
 	a.startPayment()
-	a.tendered.set(money.FromDirhams(20))
+	a.tendered.set(money.FromMajor(20))
 	a.completeSale() // 14.00 in cash
 
 	tt := ui.NewTester(a.view, 1366, 768)
@@ -398,7 +399,7 @@ func TestCloseDay(t *testing.T) {
 	// The next sale starts the next day, with the drawer as counted.
 	a.addItem(a.catalog.ItemsIn("meals")[0])
 	a.startPayment()
-	a.tendered.set(money.FromDirhams(14))
+	a.tendered.set(money.FromMajor(14))
 	a.completeSale()
 	if a.day == nil || a.day.OpeningFloat != 11000 || a.lastCode != "T1-001" {
 		t.Fatalf("next day %+v, order %q, err %q", a.day, a.lastCode, a.payErr)
@@ -410,7 +411,7 @@ func TestCloseWithoutCounting(t *testing.T) {
 	openTill(t, a)
 	a.addItem(a.catalog.ItemsIn("meals")[0])
 	a.startPayment()
-	a.tendered.set(money.FromDirhams(14))
+	a.tendered.set(money.FromMajor(14))
 	a.completeSale() // 14.00 in cash
 
 	tt := ui.NewTester(a.view, 1366, 768)
@@ -585,7 +586,7 @@ func TestAmountEntry(t *testing.T) {
 	if e.text != "12." {
 		t.Errorf("text %q, want %q", e.text, "12.")
 	}
-	e.set(money.FromDirhams(50))
+	e.set(money.FromMajor(50))
 	e.press("7")
 	if e.text != "7" {
 		t.Errorf("a key after a quick amount gave %q", e.text)
@@ -593,14 +594,47 @@ func TestAmountEntry(t *testing.T) {
 }
 
 func TestQuickAmounts(t *testing.T) {
-	got := quickAmounts(1600)
-	want := []money.Fils{1600, 2000, 5000, 10000}
-	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got %v, want %v", got, want)
+	defer money.Use(money.AED)
+	kwd, _ := money.LookupCurrency("KWD")
+	jpy, _ := money.LookupCurrency("JPY")
+	for _, tc := range []struct {
+		cur   money.Currency
+		total money.Fils
+		want  []money.Fils
+	}{
+		{money.AED, 1600, []money.Fils{1600, 2000, 5000, 10000}},
+		{money.AED, 75, []money.Fils{75, 100, 200, 500}},
+		{money.AED, 2000, []money.Fils{2000, 5000, 10000, 20000}},
+		{kwd, 1650, []money.Fils{1650, 2000, 5000, 10000}},
+		{jpy, 1600, []money.Fils{1600, 2000, 5000, 10000}},
+	} {
+		money.Use(tc.cur)
+		got := quickAmounts(tc.total)
+		if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("%s %d: got %v, want %v", tc.cur.Code, tc.total, got, tc.want)
 		}
+	}
+}
+
+// Amounts are typed with the currency's decimals: three for dinars, none
+// for yen.
+func TestAmountEntryDecimals(t *testing.T) {
+	defer money.Use(money.AED)
+	type_ := func(keys ...string) amountEntry {
+		var e amountEntry
+		for _, k := range keys {
+			e.press(k)
+		}
+		return e
+	}
+	kwd, _ := money.LookupCurrency("KWD")
+	money.Use(kwd)
+	if e := type_("1", ".", "2", "5", "0", "9"); e.text != "1.250" || e.value() != 1250 {
+		t.Errorf("KWD: %q %d", e.text, e.value())
+	}
+	jpy, _ := money.LookupCurrency("JPY")
+	money.Use(jpy)
+	if e := type_("1", ".", "5", "0"); e.text != "150" || e.value() != 150 {
+		t.Errorf("JPY: %q %d", e.text, e.value())
 	}
 }

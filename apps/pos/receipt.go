@@ -232,7 +232,7 @@ func (r Receipt) Doc(width int) PrintDoc {
 		b.item(l.Qty, l.Item.Name, l.Total().String(), l.Mods, false)
 	}
 	b.rule()
-	b.pair("Total", r.Total.AED(), true)
+	b.pair("Total", r.Total.WithCode(), true)
 	if r.Method == payCash {
 		b.pair("Cash", r.Tendered.String(), false)
 		b.pair("Change", r.Change.String(), false)
@@ -283,7 +283,7 @@ func refundDoc(o Order, r Refund, cfg Config) PrintDoc {
 	if r.Method == payCard {
 		method = "Back to the card"
 	}
-	b.pair(method, r.Total.AED(), true)
+	b.pair(method, r.Total.WithCode(), true)
 	return b.doc
 }
 
@@ -312,7 +312,7 @@ func reportDoc(r DayReport, cfg Config) PrintDoc {
 	b.pair(fmt.Sprintf("  Cash, %d", r.CashOrders), r.Cash.String(), false)
 	b.pair(fmt.Sprintf("  Card, %d", r.CardOrders), r.Card.String(), false)
 	b.pair(fmt.Sprintf("Refunds, %d", r.RefundCount), minus(r.Refunds()), false)
-	b.pair("Net sales", r.Net().AED(), true)
+	b.pair("Net sales", r.Net().WithCode(), true)
 	b.pair(fmt.Sprintf("Voided, %d orders", r.VoidCount), r.VoidTotal.String(), false)
 	b.rule()
 	b.pair("At the start", r.Day.OpeningFloat.String(), false)
@@ -367,7 +367,7 @@ func testDoc(cfg Config, role string) PrintDoc {
 	for _, l := range lines {
 		r.Total += l.Total()
 	}
-	r.Tendered = money.FromDirhams(20)
+	r.Tendered = money.FromMajor(20)
 	r.Change = r.Tendered - r.Total
 	d := r.Doc(cfg.ReceiptWidth)
 	if !cfg.PlainReceipts {

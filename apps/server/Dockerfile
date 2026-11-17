@@ -15,6 +15,7 @@ FROM golang:1.27-alpine AS server
 # Fetch the Go version go.mod asks for, if the image's is older.
 ENV GOTOOLCHAIN=auto
 WORKDIR /src/apps/server
+COPY pkg /src/pkg
 COPY apps/server/go.mod apps/server/go.sum ./
 RUN go mod download
 COPY apps/server ./

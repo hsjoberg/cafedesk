@@ -81,7 +81,7 @@ CAFEDESK_SNAPSHOTS=testdata/snapshots go test -run TestSnapshots ./...
 docker compose up -d postgres
 cd apps/server
 export DATABASE_URL='postgres://cafedesk:cafedesk@localhost:5432/cafedesk?sslmode=disable'
-go run . setup -org "..." -shop "..." -name "..." -username "..."   # once
+go run . setup -org "..." -shop "..." -name "..." -username "..." -currency AED -timezone Asia/Dubai   # once
 go run .              # http://localhost:8080
 TEST_DATABASE_URL="$DATABASE_URL" go test ./...
 cd ../admin && bun install && bun run dev   # http://localhost:5173

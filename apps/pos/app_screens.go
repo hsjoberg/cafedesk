@@ -135,7 +135,7 @@ func (a *app) confirmRefund() {
 		r.err = "Choose what to refund."
 		return
 	}
-	a.withManager(fmt.Sprintf("Refund %s on %s", total.AED(), o.Code), func(mgr Staff) {
+	a.withManager(fmt.Sprintf("Refund %s on %s", total.WithCode(), o.Code), func(mgr Staff) {
 		store, cfg, staff, order := a.store, a.cfg, *a.staff, *o
 		qty, reason := r.qty, r.reason
 		r.saving = true

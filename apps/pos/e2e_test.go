@@ -44,7 +44,7 @@ func TestEndToEnd(t *testing.T) {
 	if a.staff == nil || a.staff.MustChangePIN {
 		t.Fatalf("signed in as %+v", a.staff)
 	}
-	a.float.set(money.FromDirhams(100))
+	a.float.set(money.FromMajor(100))
 	a.startDay()
 	tt.Frame()
 
@@ -59,7 +59,7 @@ func TestEndToEnd(t *testing.T) {
 	mustClick(t, tt, "Extra parotta  +1.00")
 	mustClick(t, tt, "Done")
 	a.startPayment()
-	a.tendered.set(money.FromDirhams(20))
+	a.tendered.set(money.FromMajor(20))
 	a.completeSale()
 	sold := *a.lastOrder
 
@@ -82,7 +82,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// Close the day.
 	a.openDayReport()
-	a.counted.set(money.FromDirhams(100) + 1700 - 100)
+	a.counted.set(money.FromMajor(100) + 1700 - 100)
 	a.closeDay()
 	if a.day != nil {
 		t.Fatalf("the day didn't close: %s", a.dayErr)

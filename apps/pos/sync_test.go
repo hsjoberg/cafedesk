@@ -43,12 +43,13 @@ type fakeServer struct {
 	shop     uuid.UUID
 	ravi     uuid.UUID
 	raviHash string
+	currency api.Currency // the business's
 }
 
 const fakeToken = "device-token"
 
 func newFakeServer(t *testing.T) *fakeServer {
-	f := &fakeServer{shop: uuid.New(), ravi: uuid.New(), raviHash: hashPIN("5678")}
+	f := &fakeServer{shop: uuid.New(), ravi: uuid.New(), raviHash: hashPIN("5678"), currency: api.Currency{Code: "AED", Decimals: 2}}
 	tea, karak, sugar, normal, less := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/terminal/pair", func(w http.ResponseWriter, r *http.Request) {
@@ -60,9 +61,10 @@ func newFakeServer(t *testing.T) *fakeServer {
 			return
 		}
 		json.NewEncoder(w).Encode(api.Pairing{Token: fakeToken,
-			Organization: api.Organization{Id: uuid.New(), Name: "Test Org"},
-			Shop:         api.Shop{Id: f.shop, Name: "Downtown", Currency: "AED", Timezone: "Asia/Dubai"},
-			Terminal:     api.Terminal{Id: uuid.New(), ShopId: f.shop, Code: "T2", Status: api.Paired}})
+			Organization: api.Organization{Id: uuid.New(), Name: "Test Org", Currency: f.currency.Code,
+				CurrencyDecimals: f.currency.Decimals, Country: api.AE, VatPercent: 5},
+			Shop:     api.Shop{Id: f.shop, Name: "Downtown", Timezone: "Asia/Dubai"},
+			Terminal: api.Terminal{Id: uuid.New(), ShopId: f.shop, Code: "T2", Status: api.Paired}})
 	})
 	authed := func(w http.ResponseWriter, r *http.Request) bool {
 		f.mu.Lock()
@@ -81,6 +83,9 @@ func newFakeServer(t *testing.T) *fakeServer {
 			Items: []api.SyncItem{}, ModifierGroups: []api.SyncModifierGroup{}, Staff: []api.SyncStaff{},
 			Shop: api.ReceiptHeader{TradeName: "Karak Corner Cafeteria", TradeNameAr: "كافتيريا ركن الكرك",
 				Address: "Downtown, Dubai", AddressAr: "وسط المدينة، دبي"}}
+		f.mu.Lock()
+		ch.Currency = f.currency
+		f.mu.Unlock()
 		if ch.Full {
 			ch.Categories = []api.SyncCategory{{Id: tea, Name: "Hot drinks", Color: "#2F6690", Kitchen: false}}
 			ch.ModifierGroups = []api.SyncModifierGroup{{Id: sugar, Name: "Sugar", Modifiers: []api.SyncModifier{
@@ -167,7 +172,7 @@ func connectedTill(t *testing.T) (*app, *fakeServer, memSecrets, *ui.Tester) {
 	if a.staff == nil || a.staff.Name != "Ravi" {
 		t.Fatalf("signed in as %+v; texts %q", a.staff, tt.Texts())
 	}
-	a.float.set(money.FromDirhams(100))
+	a.float.set(money.FromMajor(100))
 	a.startDay()
 	tt.Frame()
 	return a, f, secrets, tt
@@ -185,6 +190,42 @@ func TestStartConnected(t *testing.T) {
 	tt.Frame()
 	if a.pairing != nil || tt.HasText("Connect with a new code") {
 		t.Fatalf("asks for a code; texts %q", tt.Texts())
+	}
+}
+
+// A till counts in its business's currency: from the admin when it
+// connects, and again if the admin changes it.
+func TestCurrencyFromAdmin(t *testing.T) {
+	t.Cleanup(func() { money.Use(money.AED) })
+	f := newFakeServer(t)
+	f.currency = api.Currency{Code: "KWD", Decimals: 3}
+	a, _ := newTestAppMode(t, false)
+	a.secrets = memSecrets{}
+	a.cfg.ServerURL = f.URL
+	tt := ui.NewTester(a.view, 1366, 768)
+	connect(t, a, tt)
+	if money.Current().Code != "KWD" || a.cfg.Currency.Decimals != 3 {
+		t.Fatalf("currency %+v, config %+v", money.Current(), a.cfg.Currency)
+	}
+	if saved, err := loadConfig(a.cfgDir); err != nil || saved.Currency.Code != "KWD" {
+		t.Errorf("not kept: %+v, %v", saved.Currency, err)
+	}
+	if got := a.catalog.Items[0].Price.WithCode(); got != "KWD 0.120" {
+		t.Errorf("a price: %q", got)
+	}
+	f.mu.Lock()
+	f.currency = api.Currency{Code: "USD", Decimals: 2}
+	f.mu.Unlock()
+	a.syncNow()
+	if money.Current().Code != "USD" || a.cfg.Currency.Code != "USD" {
+		t.Errorf("after a change: %+v", money.Current())
+	}
+	// A till started again counts in the one it kept.
+	money.Use(money.AED)
+	cfg, _ := loadConfig(a.cfgDir)
+	newApp(cfg, a.cfgDir)
+	if money.Current().Code != "USD" {
+		t.Errorf("after a start: %+v", money.Current())
 	}
 }
 

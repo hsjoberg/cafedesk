@@ -66,27 +66,44 @@ type User struct {
 	Active   bool
 }
 
-// Org is an organization.
+// Org is an organization: a business, with the settings of all its shops.
 type Org struct {
-	ID   uuid.UUID
-	Name string
+	ID         uuid.UUID
+	Name       string
+	Currency   string // ISO 4217, one of money.Currencies
+	Country    string // CountryUAE, or "" for none in particular
+	VatPercent float64
 }
+
+// CountryUAE follows the UAE's rules: its VAT registration thresholds, and
+// receipts with the business's name and address in Arabic.
+const CountryUAE = "AE"
 
 // Shop is a shop of an organization.
 type Shop struct {
 	ID       uuid.UUID
 	Name     string
-	Currency string
 	Timezone string
 	Details  ShopDetails
+}
+
+// Settings are a new business's: its currency, country and time zone.
+type Settings struct {
+	Currency string
+	Country  string
+	Timezone string
 }
 
 // Setup creates the first organization, its first shop, and its owner. It
 // fails with ErrConflict if an organization already exists: it is for a
 // new server.
-func (s *Store) Setup(ctx context.Context, orgName, shopName, ownerName, username, passwordHash string) (Org, Shop, User, error) {
-	org := Org{ID: newID(), Name: strings.TrimSpace(orgName)}
-	shop := Shop{ID: newID(), Name: strings.TrimSpace(shopName), Currency: "AED", Timezone: "Asia/Dubai"}
+func (s *Store) Setup(ctx context.Context, orgName, shopName, ownerName, username, passwordHash string, set Settings) (Org, Shop, User, error) {
+	vat := 0.0
+	if set.Country == CountryUAE {
+		vat = 5
+	}
+	org := Org{ID: newID(), Name: strings.TrimSpace(orgName), Currency: set.Currency, Country: set.Country, VatPercent: vat}
+	shop := Shop{ID: newID(), Name: strings.TrimSpace(shopName), Timezone: set.Timezone}
 	user := User{ID: newID(), OrgID: org.ID, Username: NormalUsername(username), Name: strings.TrimSpace(ownerName),
 		Role: "owner", Active: true}
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
@@ -97,11 +114,12 @@ func (s *Store) Setup(ctx context.Context, orgName, shopName, ownerName, usernam
 		if n > 0 {
 			return ErrConflict
 		}
-		if _, err := tx.Exec(ctx, "INSERT INTO organizations (id, name) VALUES ($1, $2)", org.ID, org.Name); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO organizations (id, name, currency, country, vat_percent)
+			VALUES ($1, $2, $3, $4, $5)`, org.ID, org.Name, org.Currency, org.Country, org.VatPercent); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "INSERT INTO shops (id, org_id, name, currency, timezone) VALUES ($1, $2, $3, $4, $5)",
-			shop.ID, org.ID, shop.Name, shop.Currency, shop.Timezone); err != nil {
+		if _, err := tx.Exec(ctx, "INSERT INTO shops (id, org_id, name, timezone) VALUES ($1, $2, $3, $4)",
+			shop.ID, org.ID, shop.Name, shop.Timezone); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, `INSERT INTO users (id, org_id, username, name, role, password_hash)
@@ -196,7 +214,8 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error 
 // Org returns an organization.
 func (s *Store) Org(ctx context.Context, id uuid.UUID) (Org, error) {
 	o := Org{ID: id}
-	err := s.pool.QueryRow(ctx, "SELECT name FROM organizations WHERE id = $1", id).Scan(&o.Name)
+	err := s.pool.QueryRow(ctx, "SELECT name, currency, country, vat_percent::float8 FROM organizations WHERE id = $1", id).
+		Scan(&o.Name, &o.Currency, &o.Country, &o.VatPercent)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return o, ErrNotFound
 	}

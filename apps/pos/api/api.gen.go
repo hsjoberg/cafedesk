@@ -33,6 +33,24 @@ func (e Area) Valid() bool {
 	}
 }
 
+// Defines values for Country.
+const (
+	AE    Country = "AE"
+	Empty Country = ""
+)
+
+// Valid indicates whether the value is a known member of the Country enum.
+func (e Country) Valid() bool {
+	switch e {
+	case AE:
+		return true
+	case Empty:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for EventType.
 const (
 	EventTypeBusinessDay  EventType = "business_day"
@@ -309,6 +327,7 @@ type CategoryInput struct {
 // till has that isn't among them is gone.
 type Changes struct {
 	Categories     []SyncCategory      `json:"categories"`
+	Currency       Currency            `json:"currency"`
 	Full           bool                `json:"full"`
 	Items          []SyncItem          `json:"items"`
 	ModifierGroups []SyncModifierGroup `json:"modifierGroups"`
@@ -319,6 +338,18 @@ type Changes struct {
 
 	// Version Ask for changes since this next time.
 	Version int64 `json:"version"`
+}
+
+// Country The country whose rules the admin follows: AE for the UAE (the VAT
+// registration thresholds, and receipts in Arabic as its consumer
+// protection law asks), or empty for another, with no rules of its own.
+type Country string
+
+// Currency defines model for Currency.
+type Currency struct {
+	// Code ISO 4217, such as AED.
+	Code     string `json:"code"`
+	Decimals int    `json:"decimals"`
 }
 
 // DayClose defines model for DayClose.
@@ -545,6 +576,8 @@ type LocalDate = string
 
 // Me defines model for Me.
 type Me struct {
+	// Currencies The currencies a business can choose.
+	Currencies   []Currency   `json:"currencies"`
 	Organization Organization `json:"organization"`
 	Shops        []Shop       `json:"shops"`
 	User         User         `json:"user"`
@@ -682,8 +715,36 @@ type OrderVoidEvent struct {
 
 // Organization defines model for Organization.
 type Organization struct {
-	Id   openapi_types.UUID `json:"id"`
-	Name string             `json:"name"`
+	// Country The country whose rules the admin follows: AE for the UAE (the VAT
+	// registration thresholds, and receipts in Arabic as its consumer
+	// protection law asks), or empty for another, with no rules of its own.
+	Country Country `json:"country"`
+
+	// Currency The ISO 4217 code of the currency every amount is in, such as AED.
+	Currency string `json:"currency"`
+
+	// CurrencyDecimals How many decimals the currency's amounts have; 10 to this power of the smallest unit make one.
+	CurrencyDecimals int                `json:"currencyDecimals"`
+	Id               openapi_types.UUID `json:"id"`
+	Name             string             `json:"name"`
+
+	// VatPercent The VAT a supplier adds to prices before VAT, as a percentage; 0 for none.
+	VatPercent float64 `json:"vatPercent"`
+}
+
+// OrganizationInput defines model for OrganizationInput.
+type OrganizationInput struct {
+	// Country The country whose rules the admin follows: AE for the UAE (the VAT
+	// registration thresholds, and receipts in Arabic as its consumer
+	// protection law asks), or empty for another, with no rules of its own.
+	Country Country `json:"country"`
+
+	// Currency An ISO 4217 code the server knows. It can change only while there are no sales or purchases.
+	Currency string `json:"currency"`
+	Name     string `json:"name"`
+
+	// VatPercent From 0 to 50.
+	VatPercent float64 `json:"vatPercent"`
 }
 
 // PairRequest defines model for PairRequest.
@@ -1005,15 +1066,16 @@ type Shop struct {
 
 	// AddressAr The address in Arabic.
 	AddressAr string             `json:"addressAr"`
-	Currency  string             `json:"currency"`
 	Id        openapi_types.UUID `json:"id"`
 
 	// LicenceNumber The trade licence's number. Printed on receipts if set; empty leaves it off.
 	LicenceNumber string `json:"licenceNumber"`
 
 	// Name What the shop is called in the admin and on its tills, such as its area.
-	Name     string `json:"name"`
-	Phone    string `json:"phone"`
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+
+	// Timezone An IANA time zone, such as Asia/Dubai. Reports count hours in it.
 	Timezone string `json:"timezone"`
 
 	// TradeName The business's name as on its trade licence, printed at the top of receipts.
@@ -1034,6 +1096,9 @@ type ShopInput struct {
 	LicenceNumber string `json:"licenceNumber"`
 	Name          string `json:"name"`
 	Phone         string `json:"phone"`
+
+	// Timezone An IANA time zone, such as Asia/Dubai.
+	Timezone string `json:"timezone"`
 
 	// TradeName The business's name as on its trade licence, printed at the top of receipts.
 	TradeName string `json:"tradeName"`
@@ -1277,10 +1342,13 @@ type UserRole string
 
 // VatStatus defines model for VatStatus.
 type VatStatus struct {
+	// Applies The business's country has thresholds the server knows, in its currency. When not, the rest is zero.
+	Applies bool `json:"applies"`
+
 	// From A date in the shop's own time, YYYY-MM-DD.
 	From LocalDate `json:"from"`
 
-	// MandatoryFils Above this over 12 months, registering for VAT is required (AED 375,000).
+	// MandatoryFils Above this over 12 months, registering for VAT is required (in the UAE, AED 375,000).
 	MandatoryFils int64 `json:"mandatoryFils"`
 
 	// Registered A shop of the organization is registered for VAT.
@@ -1292,7 +1360,7 @@ type VatStatus struct {
 	// To A date in the shop's own time, YYYY-MM-DD.
 	To LocalDate `json:"to"`
 
-	// VoluntaryFils Above this, registering is allowed (AED 187,500).
+	// VoluntaryFils Above this, registering is allowed (in the UAE, AED 187,500).
 	VoluntaryFils int64 `json:"voluntaryFils"`
 }
 
@@ -1373,6 +1441,9 @@ type MoveModifierGroupJSONRequestBody = Move
 
 // SetModifierRecipeJSONRequestBody defines body for SetModifierRecipe for application/json ContentType.
 type SetModifierRecipeJSONRequestBody = RecipeInput
+
+// UpdateOrganizationJSONRequestBody defines body for UpdateOrganization for application/json ContentType.
+type UpdateOrganizationJSONRequestBody = OrganizationInput
 
 // UpdateProductJSONRequestBody defines body for UpdateProduct for application/json ContentType.
 type UpdateProductJSONRequestBody = ProductInput

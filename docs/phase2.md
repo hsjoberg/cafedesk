@@ -74,10 +74,13 @@ You need Docker (for Postgres), Go and Bun.
 docker compose up -d postgres
 
 # 2. Set up your organization, first shop and owner login (once).
-#    It asks for a password twice. -demo-menu starts with the till's demo menu.
+#    It asks for a password twice. -currency is an ISO 4217 code (AED, USD,
+#    KWD...); -country AE follows the UAE's rules (the VAT threshold warning,
+#    receipts in Arabic), left out for none. -demo-menu starts with the
+#    till's demo menu.
 cd apps/server
 export DATABASE_URL='postgres://cafedesk:cafedesk@localhost:5432/cafedesk?sslmode=disable'
-go run . setup -org "Your company" -shop "Downtown" -name "Your name" -username yourname -demo-menu
+go run . setup -org "Your company" -shop "Downtown" -name "Your name" -username yourname -currency AED -country AE -timezone Asia/Dubai -demo-menu
 
 # 3. The server, on http://localhost:8080
 go run .
@@ -105,7 +108,7 @@ On Windows, in PowerShell:
 docker compose up -d postgres
 cd apps\server
 $env:DATABASE_URL = 'postgres://cafedesk:cafedesk@localhost:5432/cafedesk?sslmode=disable'
-go run . setup -org "Your company" -shop "Downtown" -name "Your name" -username yourname -demo-menu
+go run . setup -org "Your company" -shop "Downtown" -name "Your name" -username yourname -currency AED -country AE -timezone Asia/Dubai -demo-menu
 cd ..\admin
 bun install
 bun run build
@@ -129,12 +132,12 @@ it never mixes into a real one.
 docker compose exec postgres createdb -U cafedesk cafedesk_demo
 cd apps\server
 $env:DATABASE_URL = 'postgres://cafedesk:cafedesk@localhost:5432/cafedesk_demo?sslmode=disable'
-go run . demo            # -days 90 for more
+go run . demo            # -days 90 for more; -currency KWD -country= for dinars, outside the UAE
 $env:PORT = '8090'       # beside the real one on 8080
 go run .
 ```
 
-It prints the sign-in, `demo@cafedesk.test`, with a new password each time
+It prints the sign-in, the username `demo`, with a new password each time
 (or set `CAFEDESK_OWNER_PASSWORD` first), and the tills' starting PINs. The
 two tills show as connected but no PC holds their keys; "Connect a new PC" on
 Tills connects a real till to the demo. The sales end the day `demo` ran: for
@@ -165,10 +168,11 @@ docker compose exec postgres dropdb -U cafedesk cafedesk_demo
     the till's own day report, so the two agree. Hours are the shop's clock.
   - A till that hasn't been in touch for 15 minutes is named under the totals:
     its later sales aren't in yet.
-  - **VAT**: once net sales over the last 12 months (every shop's) reach 80%
-    of AED 375,000, a notice says so; above it, that registering with the
-    Federal Tax Authority is required, within 30 days. Nothing shows below
-    that, or once a shop is registered.
+  - **VAT**, for a business in the UAE: once net sales over the last 12
+    months (every shop's) reach 80% of AED 375,000, a notice says so; above
+    it, that registering with the Federal Tax Authority is required, within
+    30 days. Nothing shows below that, once a shop is registered, or for a
+    business outside the UAE.
 - **Menu**: category tabs and tiles, drawn as the till draws them. Click a tile
   to edit it on the right; the tile changes as you type. Add, edit, reorder and
   delete categories and items. Choose a category's band color, which option
@@ -176,13 +180,23 @@ docker compose exec postgres dropdb -U cafedesk cafedesk_demo
 - **Options**: option groups such as Sugar or Extras. "One" (a sugar level) or
   "Any number" (extras), each option with an Arabic name, a price change, and
   whether it is chosen when the item is tapped.
-- **Shop**: each shop's name in the admin, and what its receipts print at the
-  top: the trade name and address in English and Arabic, the phone and the
-  trade licence number. The UAE's consumer protection law (Federal Law 15 of
-  2020, Article 8) asks a receipt to show the trade name and address, in
-  Arabic, with other languages allowed beside it; the page says what a shop
-  still lacks, and shows the top of a receipt as it prints. Tills get the
-  details with every sync.
+- **Shop**: the **business**'s settings, then each shop's.
+  - The business: its name; its **currency**, which every amount in every
+    shop is in (AED, USD, KWD and so on, with their decimals: two for most,
+    three for the Kuwaiti, Bahraini and Omani dinars, none for the yen),
+    and which can change only until there are prices, sales or purchases;
+    whose **rules** it follows, the UAE's or none; and the **VAT on
+    purchases**, what suppliers add to prices before VAT (5 in the UAE; 0
+    hides the choice on Purchases). Tills get the currency when they
+    connect and with every sync.
+  - A shop: its name in the admin, its time zone (sales by hour count in
+    it), and what its receipts print at the top: the trade name and address
+    in English and Arabic, the phone and the trade licence number. Under the
+    UAE's rules, its consumer protection law (Federal Law 15 of 2020,
+    Article 8) asks a receipt to show the trade name and address, in Arabic,
+    with other languages allowed beside it; the page says what a shop still
+    lacks, and shows the top of a receipt as it prints. Elsewhere the Arabic
+    is optional. Tills get the details with every sync.
 - On a phone, the editor opens as a full-screen sheet.
 
 Deleting archives rather than erases, so that terminals hear about it when they

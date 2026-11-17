@@ -165,6 +165,7 @@ type printNote struct {
 }
 
 func newApp(cfg Config, cfgDir string) *app {
+	money.Use(cfg.currency())
 	return &app{
 		cfg:         cfg,
 		cfgDir:      cfgDir,
@@ -614,7 +615,8 @@ func (a *app) pinChangeKey(k string) {
 
 // Amounts typed on a numpad.
 
-// amountEntry is an amount being typed in dirhams.
+// amountEntry is an amount being typed in whole units of the currency,
+// such as dirhams.
 type amountEntry struct {
 	text  string
 	quick bool // set by a quick button: the next key starts afresh
@@ -644,14 +646,14 @@ func (e *amountEntry) press(k string) {
 			e.text = e.text[:len(e.text)-1]
 		}
 	case ".":
-		if !strings.Contains(e.text, ".") {
+		if !strings.Contains(e.text, ".") && money.Current().Decimals > 0 {
 			if e.text == "" {
 				e.text = "0"
 			}
 			e.text += "."
 		}
 	default:
-		if _, frac, ok := strings.Cut(e.text, "."); ok && len(frac) >= 2 {
+		if _, frac, ok := strings.Cut(e.text, "."); ok && len(frac) >= money.Current().Decimals {
 			return
 		}
 		if len(e.text) >= 7 {
@@ -750,16 +752,16 @@ func (a *app) canComplete() bool {
 	return a.method == payCard || a.tendered.value() >= a.cart.Total()
 }
 
-// quickAmounts are the cash buttons: the exact amount, then the notes that
-// cover the total.
+// quickAmounts are the cash buttons: the exact amount, then the next three
+// round amounts above it, as notes go: 5, 10, 20, 50, 100 and so on, in
+// whole units of the currency.
 func quickAmounts(total money.Fils) []money.Fils {
 	out := []money.Fils{total}
-	for _, aed := range []int64{5, 10, 20, 50, 100, 200, 500} {
-		if f := money.FromDirhams(aed); f > total {
-			out = append(out, f)
-		}
-		if len(out) == 4 {
-			break
+	for step := int64(1); len(out) < 4 && step <= 1_000_000_000; step *= 10 {
+		for _, n := range []int64{1, 2, 5} {
+			if f := money.FromMajor(n * step); f > total && len(out) < 4 {
+				out = append(out, f)
+			}
 		}
 	}
 	return out

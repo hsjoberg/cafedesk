@@ -12,6 +12,7 @@ import (
 	"cafedesk/apps/server/internal/api"
 	"cafedesk/apps/server/internal/auth"
 	"cafedesk/apps/server/internal/store"
+	"cafedesk/pkg/money"
 )
 
 const (
@@ -190,8 +191,12 @@ func (s *Server) writeMe(w http.ResponseWriter, r *http.Request, u store.User) {
 	}
 	me := api.Me{
 		User:         api.User{Id: u.ID, Name: u.Name, Username: u.Username, Role: api.UserRole(u.Role)},
-		Organization: api.Organization{Id: org.ID, Name: org.Name},
+		Organization: store.APIOrg(org),
 		Shops:        make([]api.Shop, 0, len(shops)),
+		Currencies:   make([]api.Currency, 0, len(money.Currencies)),
+	}
+	for _, c := range money.Currencies {
+		me.Currencies = append(me.Currencies, api.Currency{Code: c.Code, Decimals: c.Decimals})
 	}
 	for _, sh := range shops {
 		me.Shops = append(me.Shops, store.APIShop(sh))

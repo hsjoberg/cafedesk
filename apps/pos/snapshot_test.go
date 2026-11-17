@@ -81,7 +81,7 @@ func TestSnapshots(t *testing.T) {
 			a.addItem(a.catalog.Items[i%3])
 			a.startPayment()
 			a.method = []string{payCash, payCard}[i%2]
-			a.tendered.set(money.FromDirhams(10))
+			a.tendered.set(money.FromMajor(10))
 			a.completeSale()
 		}
 		tt.Frame()

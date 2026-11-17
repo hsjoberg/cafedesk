@@ -65,8 +65,10 @@ type Draft = {
   /** Start warning when the supplier's invoice is overdue. */
   watch: boolean;
 };
-/** The UAE's VAT, added to prices before VAT. */
-const VAT = 0.05;
+/** The VAT a supplier adds to prices before VAT, as a fraction: the business's setting, 5% in the UAE. */
+const VAT = () => (me()?.organization.vatPercent ?? 0) / 100;
+/** The VAT as people write it: "5%". */
+const vatLabel = () => `${me()?.organization.vatPercent ?? 0}%`;
 
 const blankLine = (): LineDraft => ({ code: "", product: "", area: "counter", qty: "", price: "", amount: "", amountTyped: false,
   ...unsorted });
@@ -161,7 +163,7 @@ export function PurchasesPage() {
               qty: formatQuantity(l.quantity),
               price: formatFils(l.unitPriceFils),
               amount: formatFils(l.totalFils),
-              amountTyped: l.totalFils !== Math.round(l.quantity * l.unitPriceFils * (p.pricesBeforeVat ? 1 + VAT : 1)),
+              amountTyped: l.totalFils !== Math.round(l.quantity * l.unitPriceFils * (p.pricesBeforeVat ? 1 + VAT() : 1)),
               ...unsorted,
             })),
           }
@@ -178,7 +180,7 @@ export function PurchasesPage() {
     if (!l || l.amountTyped) return;
     const q = parseQuantity(l.qty);
     const p = money(l.price);
-    setD("lines", i, "amount", q !== null && p !== null ? formatFils(Math.round(q * p * (d.beforeVat ? 1 + VAT : 1))) : "");
+    setD("lines", i, "amount", q !== null && p !== null ? formatFils(Math.round(q * p * (d.beforeVat ? 1 + VAT() : 1))) : "");
   };
   const setBeforeVat = (on: boolean) => {
     setD("beforeVat", on);
@@ -571,10 +573,12 @@ export function PurchasesPage() {
               <span>Warn me when an invoice from {supplierNamed(d.supplier)!.name} is overdue</span>
             </label>
           </Show>
-          <label class="check">
-            <input type="checkbox" checked={d.beforeVat} onChange={(e) => setBeforeVat(e.currentTarget.checked)} />
-            <span>Prices are before 5% VAT, as on a wholesale invoice</span>
-          </label>
+          <Show when={VAT() > 0 || d.beforeVat}>
+            <label class="check">
+              <input type="checkbox" checked={d.beforeVat} onChange={(e) => setBeforeVat(e.currentTarget.checked)} />
+              <span>Prices are before {vatLabel()} VAT, as on a wholesale invoice</span>
+            </label>
+          </Show>
           <Show when={lastOf() && blankDraft()}>
             <button type="button" class="btn btn-option copy" onClick={copyLast}>
               Copy the lines of the last invoice, {shortDate(lastOf()!.date)}

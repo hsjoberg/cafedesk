@@ -20,7 +20,7 @@ func (a *app) paySheet(c *ui.Context) {
 		ui.Row(c).AlignItems(ui.Baseline).Children(func() {
 			ui.Text(c, "Payment").FontSize(fsKey).FontWeight(wBold)
 			ui.Spacer(c)
-			ui.Text(c, total.AED()).FontSize(fsKey).FontWeight(wBold).FontFeatures("tnum")
+			ui.Text(c, total.WithCode()).FontSize(fsKey).FontWeight(wBold).FontFeatures("tnum")
 		})
 		ui.Row(c).Gap(8).Children(func() {
 			for _, m := range []struct{ id, label string }{{payCash, "Cash"}, {payCard, "Card"}} {
@@ -35,7 +35,7 @@ func (a *app) paySheet(c *ui.Context) {
 		})
 		ui.Row(c).Grow(1).Gap(24).AlignItems(ui.Stretch).Children(func() {
 			if a.method == payCard {
-				ui.Text(c, "Take "+total.AED()+" on the card machine, then complete the sale.").
+				ui.Text(c, "Take "+total.WithCode()+" on the card machine, then complete the sale.").
 					FontSize(fsItem).Grow(1)
 				return
 			}

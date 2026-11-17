@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"cafedesk/pkg/money"
 )
 
 // Config is the terminal's local settings, kept as config.json in the app's
@@ -48,6 +50,19 @@ type Config struct {
 	// that can't print pictures. Otherwise they print as a picture, in
 	// English and Arabic.
 	PlainReceipts bool `json:"plainReceipts"`
+
+	// Currency is the business's, from the admin: amounts are in it. Empty
+	// until the till connects; it then counts in dirhams, as before there
+	// was a choice.
+	Currency money.Currency `json:"currency"`
+}
+
+// currency is the one amounts are in.
+func (c Config) currency() money.Currency {
+	if cur, ok := money.LookupCurrency(c.Currency.Code); ok {
+		return cur
+	}
+	return money.AED
 }
 
 // ReceiptHeader is the business's details, as receipts print them: the

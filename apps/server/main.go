@@ -29,6 +29,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // time zones for the shops, wherever the server runs
 
 	"cafedesk/apps/server/internal/api"
 	"cafedesk/apps/server/internal/auth"
@@ -37,6 +38,7 @@ import (
 	"cafedesk/apps/server/internal/server"
 	"cafedesk/apps/server/internal/store"
 	"cafedesk/apps/server/web"
+	"cafedesk/pkg/money"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -279,14 +281,21 @@ func setup(args []string) error {
 	shop := fs.String("shop", "", "the first shop's name, e.g. its area")
 	name := fs.String("name", "", "the owner's name")
 	username := fs.String("username", "", "the owner's username, to sign in to the admin")
+	currency := fs.String("currency", "", "the currency every amount is in, as an ISO 4217 code, e.g. AED or USD")
+	country := fs.String("country", "", "AE to follow the UAE's rules (VAT thresholds, receipts in Arabic); empty for none")
+	timezone := fs.String("timezone", "", "the first shop's time zone, e.g. Asia/Dubai")
 	demo := fs.Bool("demo-menu", false, "start with the demo menu")
 	fs.Parse(args)
-	if *org == "" || *shop == "" || *name == "" || *username == "" {
+	if *org == "" || *shop == "" || *name == "" || *username == "" || *currency == "" || *timezone == "" {
 		fs.Usage()
-		return errors.New("give -org, -shop, -name and -username")
+		return errors.New("give -org, -shop, -name, -username, -currency and -timezone")
 	}
 	if !store.ValidUsername(store.NormalUsername(*username)) {
 		return errors.New("a username is 2 to 32 letters, digits, dots, dashes or underscores, such as hampus")
+	}
+	set, err := settings(*currency, *country, *timezone)
+	if err != nil {
+		return err
 	}
 	// Everything that can fail without the password is checked before asking
 	// for it: the database, and whether the server is set up already.
@@ -309,7 +318,7 @@ func setup(args []string) error {
 	if err != nil {
 		return err
 	}
-	o, sh, _, err := st.Setup(ctx, *org, *shop, *name, *username, hash)
+	o, sh, _, err := st.Setup(ctx, *org, *shop, *name, *username, hash, set)
 	if errors.Is(err, store.ErrConflict) {
 		return errors.New("this server is already set up; setup is only for a new database")
 	}
@@ -325,15 +334,42 @@ func setup(args []string) error {
 	return nil
 }
 
+// settings checks a new business's currency, country and time zone.
+func settings(currency, country, timezone string) (store.Settings, error) {
+	c, ok := money.LookupCurrency(currency)
+	if !ok {
+		codes := make([]string, len(money.Currencies))
+		for i, c := range money.Currencies {
+			codes[i] = c.Code
+		}
+		return store.Settings{}, fmt.Errorf("-currency %q isn't one the server knows: %s", currency, strings.Join(codes, ", "))
+	}
+	country = strings.ToUpper(strings.TrimSpace(country))
+	if !api.Country(country).Valid() {
+		return store.Settings{}, errors.New(`-country is AE for the UAE, or empty for another`)
+	}
+	if !server.ValidTimezone(timezone) {
+		return store.Settings{}, fmt.Errorf("-timezone %q isn't a time zone: use one such as Asia/Dubai or Europe/London", timezone)
+	}
+	return store.Settings{Currency: c.Code, Country: country, Timezone: strings.TrimSpace(timezone)}, nil
+}
+
 // demo fills a new database with a demo organization: the demo menu, three
 // till staff, two tills and a month of made-up sales. It refuses a database
 // that is set up, so it never mixes into a real shop's.
 func demo(args []string) error {
 	fs := flag.NewFlagSet("demo", flag.ExitOnError)
 	days := fs.Int("days", 30, "how many days of sales, up to today")
+	currency := fs.String("currency", "AED", "the currency, as an ISO 4217 code")
+	country := fs.String("country", "AE", "AE to follow the UAE's rules; empty for none")
+	timezone := fs.String("timezone", "Asia/Dubai", "the shop's time zone")
 	fs.Parse(args)
 	if *days < 1 || *days > 400 {
 		return errors.New("-days is 1 to 400")
+	}
+	set, err := settings(*currency, *country, *timezone)
+	if err != nil {
+		return err
 	}
 	ctx := context.Background()
 	st, closeDB, err := openStore(ctx, nil)
@@ -366,7 +402,7 @@ then set DATABASE_URL to .../cafedesk_demo and run demo again`)
 		return err
 	}
 	const username = "demo"
-	o, sh, owner, err := st.Setup(ctx, "Demo café", "Demo shop", "Demo owner", username, hash)
+	o, sh, owner, err := st.Setup(ctx, "Demo café", "Demo shop", "Demo owner", username, hash, set)
 	if err != nil {
 		return err
 	}
