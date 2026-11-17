@@ -288,7 +288,7 @@ func TestVoidNeedsManager(t *testing.T) {
 	mustClick(t, tt, "Ravi")
 	mustClick(t, tt, "Orders")
 	mustClick(t, tt, "Void")
-	mustClick(t, tt, "Test order")
+	mustClick(t, tt, "Wrong item rung up")
 	mustClick(t, tt, "Void T1-001")
 	if a.approval == nil || !tt.HasText("Manager PIN needed") {
 		t.Fatalf("a cashier voided without a manager; texts %q", tt.Texts())
@@ -304,6 +304,18 @@ func TestVoidNeedsManager(t *testing.T) {
 	r, _ := a.store.Report(ctx, a.day.ID)
 	if r.Orders != 0 || r.VoidCount != 1 {
 		t.Errorf("report %+v", r)
+	}
+	// A test order, voided as one, isn't counted at all.
+	a.addItem(a.catalog.Items[0])
+	a.startPayment()
+	a.method = payCard
+	a.completeSale()
+	if err := a.store.VoidOrder(ctx, a.lastOrder.ID, a.day.ID, *a.staff, reasonTestOrder, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = a.store.Report(ctx, a.day.ID)
+	if r.Orders != 0 || r.VoidCount != 1 || r.VoidTotal != a.lastOrder.Total {
+		t.Errorf("report after a test order %+v", r)
 	}
 }
 

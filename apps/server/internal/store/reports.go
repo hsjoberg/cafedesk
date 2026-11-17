@@ -22,6 +22,11 @@ const inDays = `x.org_id = $1 AND d.date BETWEEN $2::date AND $3::date AND ($4::
 
 const dateLayout = "2006-01-02"
 
+// TestOrderReason is the till's void reason for an order rung up to try the
+// till or its printer: such an order isn't a sale at all, so the reports
+// leave it out even from the voids.
+const TestOrderReason = "Test order"
+
 // SalesReport sums an organization's sales from one business date to
 // another, both included, in one shop or all of them.
 func (s *Store) SalesReport(ctx context.Context, orgID uuid.UUID, from, to time.Time, shopID *uuid.UUID) (api.SalesReport, error) {
@@ -54,8 +59,8 @@ func (s *Store) SalesReport(ctx context.Context, orgID uuid.UUID, from, to time.
 					COUNT(*) FILTER (WHERE x.status = 'completed') AS orders,
 					SUM(x.total_fils) FILTER (WHERE x.status = 'completed')::bigint AS gross,
 					SUM(x.total_fils) FILTER (WHERE x.status = 'completed' AND x.payment_method = 'cash')::bigint AS cash,
-					COUNT(*) FILTER (WHERE x.status = 'voided') AS voids,
-					SUM(x.total_fils) FILTER (WHERE x.status = 'voided')::bigint AS voided
+					COUNT(*) FILTER (WHERE x.status = 'voided' AND x.void_reason IS DISTINCT FROM '`+TestOrderReason+`') AS voids,
+					SUM(x.total_fils) FILTER (WHERE x.status = 'voided' AND x.void_reason IS DISTINCT FROM '`+TestOrderReason+`')::bigint AS voided
 				FROM orders x JOIN business_days d ON d.id = x.business_day_id
 				WHERE `+inDays+` GROUP BY d.date) o ON o.date = g::date
 			LEFT JOIN (SELECT d.date, COUNT(*) AS refunds, SUM(x.total_fils)::bigint AS total,

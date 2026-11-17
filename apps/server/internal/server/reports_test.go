@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cafedesk/apps/server/internal/api"
+	"cafedesk/apps/server/internal/store"
 
 	"github.com/google/uuid"
 )
@@ -49,6 +50,8 @@ func TestSalesReport(t *testing.T) {
 		OpenedByName: "Ravi", OpeningFloatFils: 5000}
 	o4 := order(day2, 1, at("2026-11-16", 0, 30), cashier, api.Card, line("parotta", "Parotta", 2, 100))
 	voided := order(day2, 2, at("2026-11-15", 9, 0), cashier, api.Cash, line("karak", "Karak chai", 1, 100))
+	// Voided as a test order: not counted at all, not even as a void.
+	test := order(day2, 3, at("2026-11-15", 9, 10), cashier, api.Cash, line("karak", "Karak chai", 2, 100))
 
 	var res api.EventResult
 	till.do("POST", "/v1/terminal/events", api.EventBatch{Events: []api.Event{
@@ -65,9 +68,12 @@ func TestSalesReport(t *testing.T) {
 		{Seq: 8, Type: api.EventTypeOrder, Order: &o4},
 		{Seq: 9, Type: api.EventTypeOrder, Order: &voided},
 		{Seq: 10, Type: api.EventTypeOrderVoid, OrderVoid: &api.OrderVoidEvent{OrderId: voided.Id, VoidedAt: at("2026-11-15", 9, 5),
-			VoidedBy: manager.Id, VoidedByName: "Ravi", Reason: "Test"}},
+			VoidedBy: manager.Id, VoidedByName: "Ravi", Reason: "Wrong item rung up"}},
+		{Seq: 11, Type: api.EventTypeOrder, Order: &test},
+		{Seq: 12, Type: api.EventTypeOrderVoid, OrderVoid: &api.OrderVoidEvent{OrderId: test.Id, VoidedAt: at("2026-11-15", 9, 12),
+			VoidedBy: manager.Id, VoidedByName: "Ravi", Reason: store.TestOrderReason}},
 	}}, &res, bearer(token)...)
-	if len(res.Accepted) != 10 {
+	if len(res.Accepted) != 12 {
 		t.Fatalf("events: %+v", res)
 	}
 

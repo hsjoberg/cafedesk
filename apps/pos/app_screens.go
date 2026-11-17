@@ -34,12 +34,17 @@ type voidState struct {
 	err    string
 }
 
+// reasonTestOrder voids an order rung up to try the till or its printer:
+// it isn't a sale, so neither the day report nor the admin counts it, even
+// as a void. The admin knows it by this text.
+const reasonTestOrder = "Test order"
+
 // reasons offered for voids and refunds.
 var reasons = []string{
 	"Wrong item rung up",
 	"Customer changed their mind",
 	"Problem with the food or drink",
-	"Test order",
+	reasonTestOrder,
 	"Other",
 }
 

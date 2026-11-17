@@ -214,7 +214,7 @@ func (s *Store) Report(ctx context.Context, dayID string) (DayReport, error) {
 		}
 	}
 	rows, err = s.query(ctx, `SELECT COUNT(*), COALESCE(SUM(total_fils), 0) FROM orders
-		WHERE business_day_id = ? AND status = 'voided'`, dayID)
+		WHERE business_day_id = ? AND status = 'voided' AND COALESCE(void_reason, '') != ?`, dayID, reasonTestOrder)
 	if err != nil {
 		return r, err
 	}
