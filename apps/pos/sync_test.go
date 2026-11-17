@@ -173,6 +173,21 @@ func connectedTill(t *testing.T) (*app, *fakeServer, memSecrets, *ui.Tester) {
 	return a, f, secrets, tt
 }
 
+// A connected till that draws its first frame before reading its token
+// doesn't then ask for a new code.
+func TestStartConnected(t *testing.T) {
+	a, _ := newTestAppMode(t, false)
+	a.cfg.ShopID, a.synced = uuid.NewString(), true
+	tt := ui.NewTester(a.view, 1366, 768)
+	tt.Frame()
+	a.secrets = memSecrets{tokenKey: []byte(fakeToken)}
+	a.loadToken()
+	tt.Frame()
+	if a.pairing != nil || tt.HasText("Connect with a new code") {
+		t.Fatalf("asks for a code; texts %q", tt.Texts())
+	}
+}
+
 func TestConnectAndSync(t *testing.T) {
 	a, f, secrets, tt := connectedTill(t)
 	ctx := context.Background()

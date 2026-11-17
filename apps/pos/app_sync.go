@@ -58,6 +58,9 @@ func (a *app) loadToken() {
 		return
 	}
 	a.token = string(b)
+	// The window may have drawn the setup screen before the token was read,
+	// and it opens a code pad for a till that isn't connected: this one is.
+	a.pairing = nil
 }
 
 func (a *app) openPairing() {
